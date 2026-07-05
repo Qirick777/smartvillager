@@ -121,6 +121,13 @@ dependencies {
     // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
+    // Unit tests for world-independent logic (e.g. VillageBedScanner).
+    // The Minecraft classpath is inherited from the main source set, so tests may reference
+    // plain Minecraft data holders such as BlockPos.
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
     // Example mod dependency using a mod jar from ./libs with a flat dir repository
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
     // The group id is ignored when searching -- in this case, it is "blank"
@@ -190,4 +197,9 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+// Run world-independent unit tests on the JUnit 5 platform.
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
 }

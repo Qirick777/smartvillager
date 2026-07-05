@@ -1,10 +1,14 @@
 package com.yourname.smartvillager.registry;
 
 import com.yourname.smartvillager.SmartVillagerMod;
+import com.yourname.smartvillager.block.VillageCoreBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 /**
  * Deferred registry for all Smart Villager blocks (e.g. the upcoming Village Core Block).
@@ -21,10 +25,12 @@ public final class ModBlocks {
     private ModBlocks() {
     }
 
-    // Example (to be filled in for Phase 2):
-    // public static final RegistryObject<Block> VILLAGE_CORE = BLOCKS.register(
-    //         "village_core",
-    //         () -> new VillageCoreBlock(BlockBehaviour.Properties.of().strength(3.5F)));
+    /** The Village Core Block: placing it founds a village (design document section 5). */
+    public static final RegistryObject<Block> VILLAGE_CORE = BLOCKS.register("village_core",
+            () -> new VillageCoreBlock(BlockBehaviour.Properties.of()
+                    .strength(3.5F)
+                    .requiresCorrectToolForDrops()
+                    .sound(SoundType.STONE)));
 
     /**
      * Attaches this registry to the given mod event bus.

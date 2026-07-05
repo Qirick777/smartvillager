@@ -2,6 +2,7 @@ package com.yourname.smartvillager;
 
 import com.mojang.logging.LogUtils;
 import com.yourname.smartvillager.registry.ModBlocks;
+import com.yourname.smartvillager.registry.ModCreativeTabs;
 import com.yourname.smartvillager.registry.ModEntities;
 import com.yourname.smartvillager.registry.ModItems;
 import net.minecraftforge.api.distmarker.Dist;
@@ -36,6 +37,7 @@ public class SmartVillagerMod {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
         ModEntities.register(modEventBus);
+        ModCreativeTabs.register(modEventBus);
 
         // Common setup (runs on both client and server).
         modEventBus.addListener(this::commonSetup);

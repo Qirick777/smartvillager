@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "smartvillager:block/village_core" }
+  }
+}

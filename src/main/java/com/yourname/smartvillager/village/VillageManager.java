@@ -1,0 +1,169 @@
+package com.yourname.smartvillager.village;
+
+import com.yourname.smartvillager.SmartVillagerMod;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.saveddata.SavedData;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * The per-dimension {@link SavedData} that owns every {@link Village} in a level, keyed by core
+ * position. Persisted to {@code data/smartvillager_villages.dat}.
+ *
+ * <p>Responsibilities:</p>
+ * <ul>
+ *   <li>Create / reactivate a village when a Village Core Block is placed.</li>
+ *   <li>Put a village into its grace period when its core is destroyed.</li>
+ *   <li>Tick grace timers: damage members of inactive villages and delete villages whose grace has
+ *       expired (design document section 5, "코어 파괴 시 처리").</li>
+ * </ul>
+ */
+public class VillageManager extends SavedData {
+
+    /** SavedData file name (becomes {@code data/smartvillager_villages.dat}). */
+    private static final String DATA_NAME = SmartVillagerMod.MOD_ID + "_villages";
+
+    // TODO (balancing): the design proposes a 48000-tick (2 in-game day) grace period. Kept short
+    // here so the destroy -> grace -> death/deletion flow can be observed quickly while testing.
+    /** Grace period length in ticks (temporary test value: 600t = 30s). */
+    public static final int GRACE_TICKS = 600;
+    /** How often an inactive village damages its members, in ticks. */
+    public static final int DAMAGE_INTERVAL_TICKS = 20;
+    /** Damage dealt to each member per interval while inactive. */
+    public static final float DAMAGE_PER_INTERVAL = 1.0F;
+
+    private final Map<BlockPos, Village> villages = new HashMap<>();
+
+    public VillageManager() {
+    }
+
+    /** @return the village manager for the given level, creating/loading it on first access. */
+    public static VillageManager get(ServerLevel level) {
+        // 1.20.1 signature: computeIfAbsent(loadFunction, factorySupplier, name).
+        return level.getDataStorage().computeIfAbsent(
+                VillageManager::load, VillageManager::new, DATA_NAME);
+    }
+
+    public Collection<Village> getVillages() {
+        return villages.values();
+    }
+
+    public Village getVillageAtCore(BlockPos corePos) {
+        return villages.get(corePos.immutable());
+    }
+
+    // --- Core placement / removal ------------------------------------------
+
+    /**
+     * Called when a Village Core Block is placed. Reactivates an inactive village that still exists
+     * at this position (grace recovery), otherwise creates a new village.
+     *
+     * @return the created or reactivated village
+     */
+    public Village createVillage(BlockPos corePos) {
+        BlockPos key = corePos.immutable();
+        Village existing = villages.get(key);
+        if (existing != null) {
+            existing.activate();
+            SmartVillagerMod.LOGGER.info("Reactivated village at core {} (grace recovery)", key);
+            setDirty();
+            return existing;
+        }
+        Village village = new Village(key);
+        villages.put(key, village);
+        SmartVillagerMod.LOGGER.info("Created village at core {}", key);
+        setDirty();
+        return village;
+    }
+
+    /**
+     * Called when a Village Core Block is destroyed. Puts the village at that position into its
+     * grace period (design section 5). No-op if no village is registered at that core.
+     */
+    public void onCoreRemoved(ServerLevel level, BlockPos corePos) {
+        Village village = villages.get(corePos.immutable());
+        if (village == null || !village.isActive()) {
+            return;
+        }
+        long deadline = level.getGameTime() + GRACE_TICKS;
+        village.deactivate(deadline);
+        SmartVillagerMod.LOGGER.info(
+                "Core destroyed at {}; village INACTIVE, grace ends at tick {}", corePos, deadline);
+        setDirty();
+    }
+
+    // --- Ticking ------------------------------------------------------------
+
+    /**
+     * Advances grace timers for this level's villages. Inactive villages periodically damage their
+     * members and are deleted once their grace deadline passes.
+     */
+    public void tick(ServerLevel level) {
+        long now = level.getGameTime();
+        List<BlockPos> expired = null;
+
+        for (Village village : villages.values()) {
+            if (village.isActive()) {
+                continue;
+            }
+            if (now >= village.getGraceDeadlineTick()) {
+                if (expired == null) {
+                    expired = new ArrayList<>();
+                }
+                expired.add(village.getCorePos());
+            } else if (now % DAMAGE_INTERVAL_TICKS == 0) {
+                damageMembers(level, village);
+            }
+        }
+
+        if (expired != null) {
+            for (BlockPos corePos : expired) {
+                villages.remove(corePos);
+                SmartVillagerMod.LOGGER.info("Village at {} deleted (grace expired)", corePos);
+            }
+            setDirty();
+        }
+    }
+
+    private void damageMembers(ServerLevel level, Village village) {
+        for (UUID memberId : village.getMembers()) {
+            Entity entity = level.getEntity(memberId);
+            if (entity instanceof LivingEntity living) {
+                living.hurt(level.damageSources().magic(), DAMAGE_PER_INTERVAL);
+            }
+        }
+    }
+
+    // --- NBT ----------------------------------------------------------------
+
+    public static VillageManager load(CompoundTag tag) {
+        VillageManager manager = new VillageManager();
+        ListTag list = tag.getList("Villages", Tag.TAG_COMPOUND);
+        for (int i = 0; i < list.size(); i++) {
+            Village village = Village.load(list.getCompound(i));
+            manager.villages.put(village.getCorePos(), village);
+        }
+        return manager;
+    }
+
+    @Override
+    public CompoundTag save(CompoundTag tag) {
+        ListTag list = new ListTag();
+        for (Village village : villages.values()) {
+            list.add(village.save());
+        }
+        tag.put("Villages", list);
+        return tag;
+    }
+}

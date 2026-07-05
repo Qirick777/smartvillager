@@ -1,10 +1,12 @@
 package com.yourname.smartvillager.registry;
 
 import com.yourname.smartvillager.SmartVillagerMod;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 /**
  * Deferred registry for all Smart Villager items (block items, the spawn egg, etc.).
@@ -20,6 +22,10 @@ public final class ModItems {
 
     private ModItems() {
     }
+
+    /** Block item for the Village Core Block. */
+    public static final RegistryObject<Item> VILLAGE_CORE = ITEMS.register("village_core",
+            () -> new BlockItem(ModBlocks.VILLAGE_CORE.get(), new Item.Properties()));
 
     // Example (to be filled in for Phase 3):
     // public static final RegistryObject<Item> SMART_VILLAGER_SPAWN_EGG = ITEMS.register(
