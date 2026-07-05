@@ -33,6 +33,7 @@ public final class ModCreativeTabs {
                     .icon(() -> new ItemStack(ModItems.VILLAGE_CORE.get()))
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.VILLAGE_CORE.get());
+                        output.accept(ModItems.SMART_VILLAGER_SPAWN_EGG.get());
                     })
                     .build());
 
@@ -46,10 +47,12 @@ public final class ModCreativeTabs {
         modEventBus.addListener(ModCreativeTabs::onBuildTabContents);
     }
 
-    /** Adds the Village Core to the vanilla Functional Blocks tab so it shows on the first page. */
+    /** Mirrors mod items into first-page vanilla tabs so they're visible without page-switching. */
     private static void onBuildTabContents(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.FUNCTIONAL_BLOCKS) {
             event.accept(ModItems.VILLAGE_CORE.get());
+        } else if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
+            event.accept(ModItems.SMART_VILLAGER_SPAWN_EGG.get());
         }
     }
 }

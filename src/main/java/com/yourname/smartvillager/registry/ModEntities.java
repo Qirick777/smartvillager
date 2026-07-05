@@ -1,10 +1,13 @@
 package com.yourname.smartvillager.registry;
 
 import com.yourname.smartvillager.SmartVillagerMod;
+import com.yourname.smartvillager.entity.SmartVillager;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 /**
  * Deferred registry for all Smart Villager entity types (the Smart Villager mob).
@@ -23,12 +26,13 @@ public final class ModEntities {
     private ModEntities() {
     }
 
-    // Example (to be filled in for Phase 3):
-    // public static final RegistryObject<EntityType<SmartVillager>> SMART_VILLAGER =
-    //         ENTITY_TYPES.register("smart_villager",
-    //                 () -> EntityType.Builder.of(SmartVillager::new, MobCategory.MISC)
-    //                         .sized(0.6F, 1.95F)
-    //                         .build("smart_villager"));
+    /** The Smart Villager mob (design document sections 2 and 6). */
+    public static final RegistryObject<EntityType<SmartVillager>> SMART_VILLAGER =
+            ENTITY_TYPES.register("smart_villager",
+                    () -> EntityType.Builder.of(SmartVillager::new, MobCategory.CREATURE)
+                            .sized(0.6F, 1.95F)
+                            .clientTrackingRange(10)
+                            .build("smart_villager"));
 
     /**
      * Attaches this registry to the given mod event bus.

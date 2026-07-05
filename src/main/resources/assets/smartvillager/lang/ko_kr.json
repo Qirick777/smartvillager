@@ -1,4 +1,7 @@
 {
   "block.smartvillager.village_core": "마을 중심",
-  "itemGroup.smartvillager": "스마트 주민"
+  "item.smartvillager.smart_villager_spawn_egg": "스마트 주민 스폰 알",
+  "entity.smartvillager.smart_villager": "스마트 주민",
+  "itemGroup.smartvillager": "스마트 주민",
+  "message.smartvillager.out_of_range": "마을 중심에서 너무 멀리 떨어져 있습니다 (64블록 이내 필요)."
 }

@@ -1,6 +1,7 @@
 package com.yourname.smartvillager.registry;
 
 import com.yourname.smartvillager.SmartVillagerMod;
+import com.yourname.smartvillager.entity.SmartVillagerSpawnEggItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -27,11 +28,11 @@ public final class ModItems {
     public static final RegistryObject<Item> VILLAGE_CORE = ITEMS.register("village_core",
             () -> new BlockItem(ModBlocks.VILLAGE_CORE.get(), new Item.Properties()));
 
-    // Example (to be filled in for Phase 3):
-    // public static final RegistryObject<Item> SMART_VILLAGER_SPAWN_EGG = ITEMS.register(
-    //         "smart_villager_spawn_egg",
-    //         () -> new ForgeSpawnEggItem(ModEntities.SMART_VILLAGER, 0x8899AA, 0x556677,
-    //                 new Item.Properties()));
+    /** Spawn egg for the Smart Villager; only usable near an active village core. */
+    public static final RegistryObject<Item> SMART_VILLAGER_SPAWN_EGG =
+            ITEMS.register("smart_villager_spawn_egg",
+                    () -> new SmartVillagerSpawnEggItem(ModEntities.SMART_VILLAGER,
+                            0x5D7C43, 0x3B4A2C, new Item.Properties()));
 
     /**
      * Attaches this registry to the given mod event bus.

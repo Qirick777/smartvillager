@@ -8,6 +8,9 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
@@ -61,6 +64,37 @@ public class VillageManager extends SavedData {
 
     public Village getVillageAtCore(BlockPos corePos) {
         return villages.get(corePos.immutable());
+    }
+
+    /** Fixed radius (blocks) around an active core within which smart villagers may be summoned. */
+    public static final int SPAWN_RANGE = 64;
+
+    /** @return {@code true} if {@code pos} is within {@link #SPAWN_RANGE} of any active village core. */
+    public boolean isWithinSpawnRange(BlockPos pos) {
+        double rangeSq = (double) SPAWN_RANGE * SPAWN_RANGE;
+        for (Village village : villages.values()) {
+            if (village.isActive() && village.getCorePos().distSqr(pos) <= rangeSq) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @return the active village whose core is nearest to {@code pos}, or {@code null} if none. */
+    public Village findNearestActiveVillage(BlockPos pos) {
+        Village nearest = null;
+        double bestSq = Double.MAX_VALUE;
+        for (Village village : villages.values()) {
+            if (!village.isActive()) {
+                continue;
+            }
+            double d = village.getCorePos().distSqr(pos);
+            if (d < bestSq) {
+                bestSq = d;
+                nearest = village;
+            }
+        }
+        return nearest;
     }
 
     // --- Core placement / removal ------------------------------------------
@@ -134,6 +168,42 @@ public class VillageManager extends SavedData {
             }
             setDirty();
         }
+    }
+
+    /**
+     * Scans the world around a village's core for beds, runs the BFS recognition
+     * ({@link VillageBedScanner}), stores the result on the village, and returns it.
+     *
+     * <p>This is a debug/verification helper (invoked from the {@code /smartvillager rescan}
+     * command): it does a bounded block scan rather than maintaining an incremental bed index.</p>
+     */
+    public List<BlockPos> recomputeBeds(ServerLevel level, Village village) {
+        BlockPos core = village.getCorePos();
+        // Search box: horizontal reach = core radius + one expansion hop; limited vertical band.
+        int reach = Village.CORE_RECOGNITION_RADIUS + Village.BED_EXPANSION_RADIUS;
+        int vertical = 24;
+
+        List<BlockPos> candidateBeds = new ArrayList<>();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dx = -reach; dx <= reach; dx++) {
+            for (int dz = -reach; dz <= reach; dz++) {
+                for (int dy = -vertical; dy <= vertical; dy++) {
+                    cursor.set(core.getX() + dx, core.getY() + dy, core.getZ() + dz);
+                    BlockState state = level.getBlockState(cursor);
+                    // Count each bed once, by its head half only.
+                    if (state.getBlock() instanceof BedBlock
+                            && state.getValue(BedBlock.PART) == BedPart.HEAD) {
+                        candidateBeds.add(cursor.immutable());
+                    }
+                }
+            }
+        }
+
+        List<BlockPos> recognized = VillageBedScanner.computeRecognizedBeds(
+                core, Village.CORE_RECOGNITION_RADIUS, Village.BED_EXPANSION_RADIUS, candidateBeds);
+        village.setRecognizedBeds(recognized);
+        setDirty();
+        return recognized;
     }
 
     private void damageMembers(ServerLevel level, Village village) {
