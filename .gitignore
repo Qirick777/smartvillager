@@ -1,0 +1,30 @@
+# Forge / ForgeGradle
+run/
+run-data/
+build/
+out/
+logs/
+classes/
+src/generated/resources/.cache/
+
+# Gradle
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Eclipse
+.settings/
+.metadata/
+.classpath
+.project
+bin/
+*.launch
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# macOS / editor cruft
+.DS_Store
+*.bak
