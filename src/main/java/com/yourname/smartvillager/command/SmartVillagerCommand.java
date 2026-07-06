@@ -117,7 +117,9 @@ public final class SmartVillagerCommand {
 
     private static int count(CommandSourceStack source) {
         ServerLevel level = source.getLevel();
-        List<SmartVillager> loaded = level.getEntities(ModEntities.SMART_VILLAGER.get(), e -> true);
+        // ServerLevel.getEntities(...) returns List<? extends T>, so use a wildcard here.
+        List<? extends SmartVillager> loaded =
+                level.getEntities(ModEntities.SMART_VILLAGER.get(), e -> true);
         source.sendSuccess(
                 () -> Component.literal("Loaded Smart Villagers in this dimension: " + loaded.size()),
                 false);
