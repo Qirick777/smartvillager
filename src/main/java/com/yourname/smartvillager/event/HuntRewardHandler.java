@@ -9,6 +9,7 @@ import net.minecraft.world.entity.animal.Chicken;
 import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -43,6 +44,18 @@ public final class HuntRewardHandler {
             villager.addVillageResource(ResourceType.FOOD, FOOD_PER_COW);
         } else if (victim instanceof Chicken) {
             villager.addVillageResource(ResourceType.FOOD, FOOD_PER_CHICKEN);
+        }
+    }
+
+    /**
+     * The hunter takes the whole catch into village storage, so the killed animal must not also
+     * drop items on the ground. Cancel the drops for a hunter's quarry.
+     */
+    @SubscribeEvent
+    public static void onLivingDrops(LivingDropsEvent event) {
+        if (event.getSource().getEntity() instanceof SmartVillager villager
+                && villager.isHuntTarget(event.getEntity())) {
+            event.setCanceled(true);
         }
     }
 }

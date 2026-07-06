@@ -12,18 +12,22 @@ import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.MoveToBlockGoal;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * CARPENTER work goal (design document section 3, 9): walk to the base of a tree, fell its whole
- * log column, replant an oak sapling, and add the felled logs to village storage as {@code WOOD}
- * (all logs collapse into one unified WOOD resource, 1 log = {@link ResourceType#MILLI_UNIT}
- * milli-wood). Active only while the villager's job is {@link Job#CARPENTER}.
+ * CARPENTER work goal (design document section 3, 9): fell a real tree and replant.
+ *
+ * <p>Only logs that are part of an actual tree are chopped — a log is a valid target only if its
+ * trunk column has leaves next to it. This deliberately excludes bare log pillars (e.g. building
+ * supports), which have no attached leaves. On felling, the trunk column and its surrounding leaf
+ * canopy are removed (so the villager is not blocked by floating leaves) and an oak sapling is
+ * replanted. Logs collapse into unified {@code WOOD} (1 log = {@link ResourceType#MILLI_UNIT}).</p>
  */
 public class ChopTreeGoal extends MoveToBlockGoal {
 
     /** Safety cap on how many logs a single fell walks upward. */
     private static final int MAX_TRUNK_HEIGHT = 32;
+    /** Horizontal radius around the trunk within which canopy leaves are cleared. */
+    private static final int CANOPY_RADIUS = 4;
 
     private final SmartVillager villager;
 
@@ -52,11 +56,26 @@ public class ChopTreeGoal extends MoveToBlockGoal {
         return 2.0D;
     }
 
-    /** Targets the base log of a tree (a log with no log directly beneath it). */
+    /** Targets the base log of a tree: a log with no log beneath it whose column has leaves. */
     @Override
     protected boolean isValidTarget(LevelReader level, BlockPos pos) {
         return level.getBlockState(pos).is(BlockTags.LOGS)
-                && !level.getBlockState(pos.below()).is(BlockTags.LOGS);
+                && !level.getBlockState(pos.below()).is(BlockTags.LOGS)
+                && columnHasLeaves(level, pos);
+    }
+
+    /** @return true if any log in the upward column from {@code base} has an adjacent leaf block. */
+    private boolean columnHasLeaves(LevelReader level, BlockPos base) {
+        BlockPos.MutableBlockPos cursor = base.mutable();
+        for (int h = 0; h < MAX_TRUNK_HEIGHT && level.getBlockState(cursor).is(BlockTags.LOGS); h++) {
+            for (Direction dir : Direction.values()) {
+                if (level.getBlockState(cursor.relative(dir)).is(BlockTags.LEAVES)) {
+                    return true;
+                }
+            }
+            cursor.move(Direction.UP);
+        }
+        return false;
     }
 
     @Override
@@ -68,12 +87,15 @@ public class ChopTreeGoal extends MoveToBlockGoal {
     }
 
     private void fellTree(ServerLevel level) {
-        if (!level.getBlockState(this.blockPos).is(BlockTags.LOGS)) {
+        if (!isValidTarget(level, this.blockPos)) {
             return;
         }
-        BlockPos.MutableBlockPos cursor = this.blockPos.mutable();
+        BlockPos base = this.blockPos.immutable();
+        BlockPos.MutableBlockPos cursor = base.mutable();
         int logs = 0;
+        int topY = base.getY();
         while (logs < MAX_TRUNK_HEIGHT && level.getBlockState(cursor).is(BlockTags.LOGS)) {
+            topY = cursor.getY();
             level.destroyBlock(cursor, false); // no drops; wood goes to village storage instead
             logs++;
             cursor.move(Direction.UP);
@@ -81,13 +103,28 @@ public class ChopTreeGoal extends MoveToBlockGoal {
         if (logs == 0) {
             return;
         }
+        clearCanopyLeaves(level, base, topY);
         this.villager.swing(InteractionHand.MAIN_HAND);
         this.villager.addVillageResource(ResourceType.WOOD, logs * ResourceType.MILLI_UNIT);
 
         // Replant a sapling on suitable ground where the trunk stood.
-        BlockState ground = level.getBlockState(this.blockPos.below());
-        if (ground.is(BlockTags.DIRT)) {
-            level.setBlockAndUpdate(this.blockPos, Blocks.OAK_SAPLING.defaultBlockState());
+        if (level.getBlockState(base.below()).is(BlockTags.DIRT)) {
+            level.setBlockAndUpdate(base, Blocks.OAK_SAPLING.defaultBlockState());
+        }
+    }
+
+    /** Removes leaves around the felled trunk so floating leaves don't block the villager. */
+    private void clearCanopyLeaves(ServerLevel level, BlockPos base, int topY) {
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int y = base.getY(); y <= topY + 3; y++) {
+            for (int dx = -CANOPY_RADIUS; dx <= CANOPY_RADIUS; dx++) {
+                for (int dz = -CANOPY_RADIUS; dz <= CANOPY_RADIUS; dz++) {
+                    cursor.set(base.getX() + dx, y, base.getZ() + dz);
+                    if (level.getBlockState(cursor).is(BlockTags.LEAVES)) {
+                        level.destroyBlock(cursor, false);
+                    }
+                }
+            }
         }
     }
 }
