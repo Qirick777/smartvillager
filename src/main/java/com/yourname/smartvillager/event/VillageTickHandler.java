@@ -40,15 +40,21 @@ public final class VillageTickHandler {
         }
 
         VillageManager.get(serverLevel).tick(serverLevel);
-        logDayPhaseTransitions(serverLevel);
+        handleDayPhase(serverLevel);
     }
 
-    private static void logDayPhaseTransitions(ServerLevel level) {
+    private static void handleDayPhase(ServerLevel level) {
         DayPhase current = DayPhase.fromDayTime(level.getDayTime());
         DayPhase previous = LAST_PHASE.put(level.dimension(), current);
-        if (previous != current) {
-            SmartVillagerMod.LOGGER.info("[{}] day phase -> {} (dayTime={})",
-                    level.dimension().location(), current, level.getDayTime() % DayPhase.TICKS_PER_DAY);
+        if (previous == current) {
+            return;
+        }
+        SmartVillagerMod.LOGGER.info("[{}] day phase -> {} (dayTime={})",
+                level.dimension().location(), current, level.getDayTime() % DayPhase.TICKS_PER_DAY);
+
+        // Evening gathering: the manager recalculates each village's demand (design section 8).
+        if (current == DayPhase.EVENING) {
+            VillageManager.get(level).recalculateDemandAll(level);
         }
     }
 }

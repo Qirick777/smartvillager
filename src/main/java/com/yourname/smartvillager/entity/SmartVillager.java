@@ -1,8 +1,10 @@
 package com.yourname.smartvillager.entity;
 
+import com.yourname.smartvillager.SmartVillagerMod;
 import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ResourceType;
 import com.yourname.smartvillager.entity.goal.FarmGoal;
+import com.yourname.smartvillager.entity.goal.GatherAtVillageGoal;
 import com.yourname.smartvillager.village.Village;
 import com.yourname.smartvillager.village.VillageManager;
 import net.minecraft.core.BlockPos;
@@ -34,11 +36,19 @@ import javax.annotation.Nullable;
  */
 public class SmartVillager extends AgeableMob {
 
+    /** Starting food buffer for a freshly spawned villager. */
+    private static final int INITIAL_FOOD_STOCK = 6;
+
     @Nullable
     private Job job;
     /** Core position of the village this villager belongs to, or {@code null} if unaffiliated. */
     @Nullable
     private BlockPos villageCorePos;
+
+    /** Personal food buffer, consumed 3x/day (design section 6). */
+    private int foodStock = INITIAL_FOOD_STOCK;
+    /** Last meal slot (0=morning, 1=noon, 2=evening); -1 until first evaluated. */
+    private int lastMealSlot = -1;
 
     public SmartVillager(EntityType<? extends SmartVillager> type, Level level) {
         super(type, level);
@@ -55,10 +65,11 @@ public class SmartVillager extends AgeableMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
-        this.goalSelector.addGoal(1, new FarmGoal(this, 0.6D, 8));
-        this.goalSelector.addGoal(2, new WaterAvoidingRandomStrollGoal(this, 0.6D));
-        this.goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 8.0F));
-        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
+        this.goalSelector.addGoal(1, new GatherAtVillageGoal(this, 0.6D));
+        this.goalSelector.addGoal(2, new FarmGoal(this, 0.8D, 12));
+        this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.6D));
+        this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
+        this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
     }
 
     // --- Job / village membership ------------------------------------------
@@ -101,14 +112,49 @@ public class SmartVillager extends AgeableMob {
         }
     }
 
+    public int getFoodStock() {
+        return foodStock;
+    }
+
     @Override
     public void tick() {
         super.tick();
-        // Server-side: unaffiliated villagers periodically try to join a village and get a job.
-        if (villageCorePos == null && !level().isClientSide
-                && level() instanceof ServerLevel serverLevel && this.tickCount % 20 == 0) {
+        if (level().isClientSide || !(level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        // Unaffiliated villagers periodically try to join a village and get a job.
+        if (villageCorePos == null && this.tickCount % 20 == 0) {
             VillageManager.get(serverLevel).tryJoinAndAssign(serverLevel, this);
         }
+        tickMeals(serverLevel);
+    }
+
+    /** Consumes one food per meal at the three daily meal boundaries (design section 6). */
+    private void tickMeals(ServerLevel level) {
+        long dayTime = level.getDayTime() % 24000L;
+        int slot = dayTime < 6000L ? 0 : (dayTime < 12000L ? 1 : 2);
+        if (lastMealSlot == -1) {
+            lastMealSlot = slot; // establish baseline without eating on the first evaluation
+            return;
+        }
+        if (slot == lastMealSlot) {
+            return;
+        }
+        lastMealSlot = slot;
+
+        if (foodStock > 0) {
+            foodStock--;
+        } else if (villageCorePos != null) {
+            // Own buffer empty: eat from communal storage if the village has any FOOD.
+            VillageManager manager = VillageManager.get(level);
+            Village village = manager.getVillageAtCore(villageCorePos);
+            if (village != null && village.getStorage(ResourceType.FOOD) > 0) {
+                village.addStorage(ResourceType.FOOD, -1);
+                manager.setDirty();
+            }
+        }
+        SmartVillagerMod.LOGGER.info("Villager {} meal (slot {}): foodStock={}",
+                getUUID(), slot, foodStock);
     }
 
     @Override
@@ -132,6 +178,7 @@ public class SmartVillager extends AgeableMob {
         if (villageCorePos != null) {
             tag.put("VillageCore", NbtUtils.writeBlockPos(villageCorePos));
         }
+        tag.putInt("FoodStock", foodStock);
     }
 
     @Override
@@ -141,6 +188,9 @@ public class SmartVillager extends AgeableMob {
         this.villageCorePos = tag.contains("VillageCore")
                 ? NbtUtils.readBlockPos(tag.getCompound("VillageCore"))
                 : null;
+        if (tag.contains("FoodStock")) {
+            this.foodStock = tag.getInt("FoodStock");
+        }
     }
 
     /** No breeding yet (Phase 9); required by {@link AgeableMob}. */

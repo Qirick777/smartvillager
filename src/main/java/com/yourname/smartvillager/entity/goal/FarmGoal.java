@@ -6,6 +6,7 @@ import com.yourname.smartvillager.entity.SmartVillager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.MoveToBlockGoal;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.CropBlock;
@@ -21,8 +22,17 @@ public class FarmGoal extends MoveToBlockGoal {
     private final SmartVillager villager;
 
     public FarmGoal(SmartVillager villager, double speedModifier, int searchRange) {
-        super(villager, speedModifier, searchRange, 1);
+        super(villager, speedModifier, searchRange, 2);
         this.villager = villager;
+    }
+
+    /**
+     * Re-scan for the next crop quickly. The vanilla default is ~200–400 ticks, which makes the
+     * farmer look idle; a short cooldown keeps it actively working the field.
+     */
+    @Override
+    protected int nextStartTick(PathfinderMob mob) {
+        return reducedTickDelay(10);
     }
 
     @Override

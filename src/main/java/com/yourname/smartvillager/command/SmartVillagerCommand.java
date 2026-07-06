@@ -77,6 +77,7 @@ public final class SmartVillagerCommand {
             source.sendSuccess(() -> Component.literal(line), false);
             source.sendSuccess(() -> Component.literal("   jobs=" + v.getJobCounts()
                     + " storage=" + v.getStorage()), false);
+            source.sendSuccess(() -> Component.literal("   demand=" + v.getDemandQueue()), false);
         }
         return villages.size();
     }

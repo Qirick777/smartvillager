@@ -2,7 +2,10 @@ package com.yourname.smartvillager.village;
 
 import com.yourname.smartvillager.SmartVillagerMod;
 import com.yourname.smartvillager.data.Job;
+import com.yourname.smartvillager.data.ResourceType;
 import com.yourname.smartvillager.entity.SmartVillager;
+import com.yourname.smartvillager.task.TaskType;
+import com.yourname.smartvillager.task.VillagerTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -150,6 +153,48 @@ public class VillageManager extends SavedData {
         village.resetJobCountsToOneEach();
         SmartVillagerMod.LOGGER.info("Initial job assignment complete for village {} ({} jobs)",
                 village.getCorePos(), assigned);
+    }
+
+    // --- Demand calculation (manager, design section 8) --------------------
+
+    /** Per-capita daily food requirement used by the food shortage calculation. */
+    public static final int FOOD_PER_CAPITA = 3;
+
+    /** Recomputes demand for every active village (called at the evening gathering). */
+    public void recalculateDemandAll(ServerLevel level) {
+        for (Village village : villages.values()) {
+            if (village.isActive()) {
+                recalculateDemand(village);
+            }
+        }
+    }
+
+    /**
+     * Minimal demand calculation (Phase 4.2): the FOOD item only. Shortage rate is
+     * {@code (need - have) / need}; a positive rate queues a {@link TaskType#GATHER_FOOD} task for
+     * farmers/hunters. Later phases add equipment, building materials, and breeding demands, then
+     * sort the queue by shortage rate.
+     */
+    public void recalculateDemand(Village village) {
+        List<VillagerTask> queue = village.getDemandQueue();
+        queue.clear();
+
+        int population = village.getPopulation();
+        if (population <= 0) {
+            return;
+        }
+
+        int need = population * FOOD_PER_CAPITA;
+        int have = village.getStorage(ResourceType.FOOD);
+        double shortage = (double) (need - have) / need;
+        if (shortage > 0.0) {
+            queue.add(new VillagerTask(TaskType.GATHER_FOOD, shortage));
+            SmartVillagerMod.LOGGER.info(
+                    "Village {} demand: GATHER_FOOD shortage={} (need={}, have={}) -> FARMER/HUNTER",
+                    village.getCorePos().toShortString(), String.format("%.2f", shortage), need, have);
+        }
+        // TODO (Phase 8): equipment (CRAFT_TOOL), building materials (WOOD/STONE/WOOL),
+        // breeding -> BUILD_HOUSE (always top priority); then sort queue by shortage desc.
     }
 
     /** Removes a villager from its village (on death/discard), keeping job counts in sync. */

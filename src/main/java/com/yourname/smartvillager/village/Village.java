@@ -2,6 +2,7 @@ package com.yourname.smartvillager.village;
 
 import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ResourceType;
+import com.yourname.smartvillager.task.VillagerTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -54,6 +55,12 @@ public class Village {
 
     /** Whether the one-time "7 gather -> assign all 7 jobs" batch assignment has happened. */
     private boolean initialJobsAssigned;
+
+    /**
+     * Current demand tasks, recomputed each evening by the manager (design section 8). Transient:
+     * regenerated every evening, so it is not persisted to NBT.
+     */
+    private final List<VillagerTask> demandQueue = new ArrayList<>();
 
     // TODO (Phase 5/8): demandQueue: List<VillagerTask> and houseSites: List<HouseSite> are added
     // once those types exist (manager demand calculation and the architect/schematic system).
@@ -226,6 +233,12 @@ public class Village {
         } else {
             storage.put(type, next);
         }
+    }
+
+    // --- Demand queue (transient) ------------------------------------------
+
+    public List<VillagerTask> getDemandQueue() {
+        return demandQueue;
     }
 
     // --- NBT ----------------------------------------------------------------
