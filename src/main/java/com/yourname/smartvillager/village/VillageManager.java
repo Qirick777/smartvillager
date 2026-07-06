@@ -163,11 +163,23 @@ public class VillageManager extends SavedData {
     /** Per-capita daily food requirement used by the food shortage calculation. */
     public static final int FOOD_PER_CAPITA = 3;
 
-    /** Recomputes demand for every active village (called at the evening gathering). */
+    /** Recomputes demand and (re)assigns each villager a task (evening gathering). */
     public void recalculateDemandAll(ServerLevel level) {
         for (Village village : villages.values()) {
             if (village.isActive()) {
                 recalculateDemand(village);
+                assignTasks(level, village);
+            }
+        }
+    }
+
+    /** The manager hands each member its task for the day from the fresh demand graph. */
+    private void assignTasks(ServerLevel level, Village village) {
+        for (UUID memberId : village.getMembers()) {
+            if (level.getEntity(memberId) instanceof SmartVillager member) {
+                var task = member.assignFromManager(level);
+                SmartVillagerMod.LOGGER.info("Manager assigned {} ({}) -> {}",
+                        memberId, member.getJob(), task);
             }
         }
     }

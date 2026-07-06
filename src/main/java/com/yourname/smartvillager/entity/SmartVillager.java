@@ -256,6 +256,13 @@ public class SmartVillager extends AgeableMob {
         }
     }
 
+    /** Manager-driven (re)assignment at the evening gathering: re-pick a fresh task. */
+    public DemandTask assignFromManager(ServerLevel level) {
+        currentTaskId = null;
+        assignTaskIfNeeded(level);
+        return getCurrentTask();
+    }
+
     /** Picks the highest-priority READY gather task for this villager's job, if idle. */
     private void assignTaskIfNeeded(ServerLevel level) {
         DemandTask current = getCurrentTask();
