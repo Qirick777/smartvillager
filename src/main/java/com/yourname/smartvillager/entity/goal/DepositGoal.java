@@ -6,25 +6,32 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.item.Items;
 
 import java.util.EnumSet;
 
 /**
- * When the villager's inventory is getting full, walk to its personal chest and move the items in.
- * This is the "return home and store" half of the storage routine; tools would be kept (none are
- * carried yet). Part of the physical storage rework (design: deposit excess into your own chest).
+ * When the villager is carrying surplus (non-material) items, it walks to its personal chest,
+ * opens it like a player would — lid animation, sound, and a short delay — moves the items in, then
+ * closes it. Crafting materials (logs / cobblestone / iron ingots) are intentionally kept in the
+ * inventory so they can still be delivered to the manufacturer.
  */
 public class DepositGoal extends Goal {
 
-    /** Total item count at which the villager goes to deposit into its chest. */
-    private static final int DEPOSIT_THRESHOLD = 32;
-    /** Give up pathing to the chest after this many ticks. */
+    /** Items withheld from deposit because they are delivered to the manufacturer instead. */
+    private static final Item[] MATERIALS = {Items.OAK_LOG, Items.COBBLESTONE, Items.IRON_INGOT};
+    private static final int DEPOSIT_THRESHOLD = 16;
+    private static final int OPEN_DELAY = 10;
+    private static final int CLOSE_DELAY = 10;
     private static final int MAX_RUN_TICKS = 200;
 
     private final SmartVillager villager;
     private final double speedModifier;
+    /** 0 approach, 1 opened (waiting), 2 deposited (waiting to close), 3 done. */
+    private int phase;
+    private int timer;
     private int runTicks;
 
     public DepositGoal(SmartVillager villager, double speedModifier) {
@@ -35,37 +42,75 @@ public class DepositGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return villager.getChestPos() != null
-                && villager.totalInventoryCount() >= DEPOSIT_THRESHOLD;
+        return villager.getChestPos() != null && depositableCount() >= DEPOSIT_THRESHOLD;
     }
 
     @Override
     public boolean canContinueToUse() {
-        return villager.getChestPos() != null
-                && villager.totalInventoryCount() > 0
-                && runTicks < MAX_RUN_TICKS;
+        if (villager.getChestPos() == null) {
+            return false;
+        }
+        if (phase >= 1 && phase < 3) {
+            return true; // once opened, always finish the close
+        }
+        return depositableCount() > 0 && runTicks < MAX_RUN_TICKS;
     }
 
     @Override
     public void start() {
+        phase = 0;
+        timer = 0;
         runTicks = 0;
         moveToChest();
+    }
+
+    @Override
+    public void stop() {
+        if ((phase == 1 || phase == 2) && villager.getChestPos() != null
+                && villager.level() instanceof ServerLevel level) {
+            villager.closeChestVisual(level, villager.getChestPos());
+        }
+        phase = 3;
     }
 
     @Override
     public void tick() {
         runTicks++;
         BlockPos chest = villager.getChestPos();
-        if (chest == null) {
+        if (chest == null || !(villager.level() instanceof ServerLevel level)) {
             return;
         }
-        double distSq = villager.distanceToSqr(
-                chest.getX() + 0.5D, chest.getY() + 0.5D, chest.getZ() + 0.5D);
-        if (distSq <= 6.0D) {
-            deposit(chest);
-        } else if (villager.getNavigation().isDone()) {
-            moveToChest();
+        switch (phase) {
+            case 0 -> {
+                if (nearChest(chest)) {
+                    villager.openChestVisual(level, chest);
+                    phase = 1;
+                    timer = 0;
+                } else if (villager.getNavigation().isDone()) {
+                    moveToChest();
+                }
+            }
+            case 1 -> {
+                if (++timer >= OPEN_DELAY) {
+                    deposit(level);
+                    phase = 2;
+                    timer = 0;
+                }
+            }
+            case 2 -> {
+                if (++timer >= CLOSE_DELAY) {
+                    villager.closeChestVisual(level, chest);
+                    phase = 3;
+                }
+            }
+            default -> {
+            }
         }
+    }
+
+    private boolean nearChest(BlockPos chest) {
+        return villager.distanceToSqr(chest.getX() + 0.5D, chest.getY() + 0.5D, chest.getZ() + 0.5D)
+                <= 9.0D;
     }
 
     private void moveToChest() {
@@ -76,22 +121,40 @@ public class DepositGoal extends Goal {
         }
     }
 
-    private void deposit(BlockPos chestPos) {
-        if (!(villager.level() instanceof ServerLevel level)) {
-            return;
-        }
-        BlockEntity blockEntity = level.getBlockEntity(chestPos);
-        if (!(blockEntity instanceof Container dest)) {
+    private void deposit(ServerLevel level) {
+        Container dest = villager.getChestContainer(level);
+        if (dest == null) {
             return;
         }
         SimpleContainer inv = villager.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
-            if (!stack.isEmpty()) {
+            if (!stack.isEmpty() && !isMaterial(stack)) {
                 inv.setItem(i, insert(dest, stack));
             }
         }
         dest.setChanged();
+    }
+
+    private int depositableCount() {
+        SimpleContainer inv = villager.getInventory();
+        int total = 0;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (!stack.isEmpty() && !isMaterial(stack)) {
+                total += stack.getCount();
+            }
+        }
+        return total;
+    }
+
+    private static boolean isMaterial(ItemStack stack) {
+        for (Item material : MATERIALS) {
+            if (stack.is(material)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Moves as much of {@code stack} as fits into {@code dest}; returns the leftover. */

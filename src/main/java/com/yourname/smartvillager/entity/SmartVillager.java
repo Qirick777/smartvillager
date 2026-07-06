@@ -46,9 +46,13 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.Container;
 
 import net.minecraft.world.entity.item.ItemEntity;
 
@@ -362,6 +366,34 @@ public class SmartVillager extends AgeableMob {
     @Nullable
     public BlockPos getChestPos() {
         return chestPos;
+    }
+
+    /** @return the container behind this villager's chest, or {@code null}. */
+    @Nullable
+    public Container getChestContainer(ServerLevel level) {
+        if (chestPos == null) {
+            return null;
+        }
+        BlockEntity blockEntity = level.getBlockEntity(chestPos);
+        return blockEntity instanceof Container container ? container : null;
+    }
+
+    /** Plays the chest lid-open animation and sound (as if a player opened it). */
+    public void openChestVisual(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.getBlock() instanceof ChestBlock) {
+            level.blockEvent(pos, state.getBlock(), 1, 1);
+            level.playSound(null, pos, SoundEvents.CHEST_OPEN, SoundSource.BLOCKS, 0.5F, 1.0F);
+        }
+    }
+
+    /** Plays the chest lid-close animation and sound. */
+    public void closeChestVisual(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.getBlock() instanceof ChestBlock) {
+            level.blockEvent(pos, state.getBlock(), 1, 0);
+            level.playSound(null, pos, SoundEvents.CHEST_CLOSE, SoundSource.BLOCKS, 0.5F, 1.0F);
+        }
     }
 
     /** Claims a nearby unclaimed bed and places a free personal chest beside it. */
