@@ -7,6 +7,7 @@ import com.yourname.smartvillager.demand.DemandTask;
 import com.yourname.smartvillager.demand.TaskState;
 import com.yourname.smartvillager.entity.goal.ChopTreeGoal;
 import com.yourname.smartvillager.entity.goal.CraftToolGoal;
+import com.yourname.smartvillager.entity.goal.DeliverGoal;
 import com.yourname.smartvillager.entity.goal.DepositGoal;
 import com.yourname.smartvillager.entity.goal.FarmGoal;
 import com.yourname.smartvillager.entity.goal.GatherAtVillageGoal;
@@ -49,8 +50,11 @@ import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
+import net.minecraft.world.entity.item.ItemEntity;
+
 import javax.annotation.Nullable;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -119,6 +123,7 @@ public class SmartVillager extends AgeableMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new DeliverGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new DepositGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new GatherAtVillageGoal(this, 0.6D));
         this.goalSelector.addGoal(2, new FarmGoal(this, 0.8D, 12));
@@ -203,6 +208,7 @@ public class SmartVillager extends AgeableMob {
         }
         tickMeals(serverLevel);
         tickBreaking(serverLevel);
+        tickPickup(serverLevel);
     }
 
     // --- Demand tasks (quota-driven work) ----------------------------------
@@ -287,6 +293,53 @@ public class SmartVillager extends AgeableMob {
         ItemStack leftover = inventory.addItem(stack);
         if (!leftover.isEmpty()) {
             spawnAtLocation(leftover);
+        }
+    }
+
+    /** NBT flag marking an item entity as a villager-to-villager share (so only villagers grab it). */
+    public static final String SHARE_TAG = "SmartVillagerShare";
+
+    /**
+     * Tosses a stack toward a point, exactly like a player dropping an item: it spawns a moving
+     * {@link ItemEntity} tagged as a share, so a recipient villager can pick it into its inventory.
+     */
+    public void tossItemToward(ItemStack stack, double tx, double ty, double tz) {
+        if (stack.isEmpty()) {
+            return;
+        }
+        double sx = getX();
+        double sy = getEyeY() - 0.3D;
+        double sz = getZ();
+        ItemEntity item = new ItemEntity(level(), sx, sy, sz, stack);
+        double dx = tx - sx;
+        double dz = tz - sz;
+        double len = Math.max(1.0E-4D, Math.sqrt(dx * dx + dz * dz));
+        item.setDeltaMovement(dx / len * 0.3D, 0.15D, dz / len * 0.3D);
+        item.setThrower(getUUID());
+        item.getPersistentData().putBoolean(SHARE_TAG, true);
+        item.setDefaultPickUpDelay();
+        level().addFreshEntity(item);
+        swing(InteractionHand.MAIN_HAND);
+    }
+
+    /** Picks up nearby villager-shared item entities (thrown by others) into this inventory. */
+    private void tickPickup(ServerLevel level) {
+        List<ItemEntity> nearby = level.getEntitiesOfClass(ItemEntity.class,
+                getBoundingBox().inflate(1.0D, 0.5D, 1.0D),
+                it -> it.isAlive() && it.getPersistentData().getBoolean(SHARE_TAG)
+                        && !getUUID().equals(it.getThrower()));
+        for (ItemEntity item : nearby) {
+            ItemStack stack = item.getItem();
+            ItemStack leftover = inventory.addItem(stack.copy());
+            int picked = stack.getCount() - leftover.getCount();
+            if (picked > 0) {
+                take(item, picked);
+                if (leftover.isEmpty()) {
+                    item.discard();
+                } else {
+                    item.setItem(leftover);
+                }
+            }
         }
     }
 
