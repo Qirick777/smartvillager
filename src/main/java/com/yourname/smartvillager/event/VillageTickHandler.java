@@ -56,5 +56,9 @@ public final class VillageTickHandler {
         if (current == DayPhase.EVENING) {
             VillageManager.get(level).recalculateDemandAll(level);
         }
+        // Morning: the manager distributes the food it collected the previous evening.
+        if (current == DayPhase.DAY) {
+            VillageManager.get(level).distributeFoodAll(level);
+        }
     }
 }

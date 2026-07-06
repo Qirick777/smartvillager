@@ -148,7 +148,11 @@ public class DepositGoal extends Goal {
         return total;
     }
 
+    /** Materials are kept for delivery; food is kept for the evening hand-in to the manager. */
     private static boolean isMaterial(ItemStack stack) {
+        if (SmartVillager.isFoodItem(stack)) {
+            return true;
+        }
         for (Item material : MATERIALS) {
             if (stack.is(material)) {
                 return true;

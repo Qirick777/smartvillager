@@ -11,6 +11,7 @@ import com.yourname.smartvillager.entity.goal.DeliverGoal;
 import com.yourname.smartvillager.entity.goal.DepositGoal;
 import com.yourname.smartvillager.entity.goal.FarmGoal;
 import com.yourname.smartvillager.entity.goal.GatherAtVillageGoal;
+import com.yourname.smartvillager.entity.goal.HandInFoodGoal;
 import com.yourname.smartvillager.entity.goal.MineGoal;
 import com.yourname.smartvillager.registry.ModItems;
 import com.yourname.smartvillager.village.Village;
@@ -55,10 +56,14 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.Container;
 
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -127,6 +132,7 @@ public class SmartVillager extends AgeableMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new HandInFoodGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new DeliverGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new DepositGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new GatherAtVillageGoal(this, 0.6D));
@@ -144,9 +150,9 @@ public class SmartVillager extends AgeableMob {
                 this, Animal.class, 10, true, false, this::isHuntTarget));
     }
 
-    /** @return true if this villager is a hunter with quota and the entity is valid quarry. */
+    /** @return true if this villager is a hunter and the entity is valid quarry (continuous). */
     public boolean isHuntTarget(LivingEntity entity) {
-        return job == Job.HUNTER && hasActiveGatherTask()
+        return job == Job.HUNTER
                 && (entity instanceof Sheep || entity instanceof Cow || entity instanceof Chicken);
     }
 
@@ -354,6 +360,43 @@ public class SmartVillager extends AgeableMob {
                 }
             }
         }
+    }
+
+    /** Food items produced by farmers/hunters that move through the shared food economy. */
+    public static final Set<Item> FOOD_ITEMS = Set.of(
+            Items.WHEAT, Items.CARROT, Items.POTATO, Items.BEETROOT, Items.BEEF, Items.CHICKEN);
+
+    public static boolean isFoodItem(ItemStack stack) {
+        return FOOD_ITEMS.contains(stack.getItem());
+    }
+
+    /** @return total count of food items in this villager's inventory. */
+    public int foodCount() {
+        int total = 0;
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (isFoodItem(stack)) {
+                total += stack.getCount();
+            }
+        }
+        return total;
+    }
+
+    /** Removes up to {@code maxCount} food items from the inventory, returned as stacks to hand off. */
+    public List<ItemStack> extractFood(int maxCount) {
+        List<ItemStack> extracted = new ArrayList<>();
+        int remaining = maxCount;
+        for (int i = 0; i < inventory.getContainerSize() && remaining > 0; i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (!isFoodItem(stack)) {
+                continue;
+            }
+            int take = Math.min(stack.getCount(), remaining);
+            extracted.add(new ItemStack(stack.getItem(), take));
+            stack.shrink(take);
+            remaining -= take;
+        }
+        return extracted;
     }
 
     /** @return total number of items across all inventory slots. */

@@ -14,6 +14,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -171,6 +172,49 @@ public class VillageManager extends SavedData {
                 assignTasks(level, village);
             }
         }
+    }
+
+    /** Morning food distribution: each active village's manager shares its food out fairly. */
+    public void distributeFoodAll(ServerLevel level) {
+        for (Village village : villages.values()) {
+            if (village.isActive()) {
+                distributeFood(level, village);
+            }
+        }
+    }
+
+    private void distributeFood(ServerLevel level, Village village) {
+        SmartVillager manager = findMember(level, village, Job.MANAGER);
+        if (manager == null) {
+            return;
+        }
+        List<SmartVillager> recipients = new ArrayList<>();
+        for (UUID memberId : village.getMembers()) {
+            if (level.getEntity(memberId) instanceof SmartVillager member && member != manager) {
+                recipients.add(member);
+            }
+        }
+        int total = manager.foodCount();
+        int share = total / (recipients.size() + 1); // manager keeps its own share + remainder
+        if (recipients.isEmpty() || share <= 0) {
+            return;
+        }
+        for (SmartVillager recipient : recipients) {
+            for (ItemStack food : manager.extractFood(share)) {
+                manager.tossItemToward(food, recipient.getX(), recipient.getEyeY(), recipient.getZ());
+            }
+        }
+        SmartVillagerMod.LOGGER.info("Village {} manager distributed food: {} total, {} each",
+                village.getCorePos().toShortString(), total, share);
+    }
+
+    private SmartVillager findMember(ServerLevel level, Village village, Job job) {
+        for (UUID memberId : village.getMembers()) {
+            if (level.getEntity(memberId) instanceof SmartVillager member && member.getJob() == job) {
+                return member;
+            }
+        }
+        return null;
     }
 
     /** The manager hands each member its task for the day from the fresh demand graph. */

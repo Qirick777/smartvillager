@@ -37,15 +37,15 @@ public class FarmGoal extends MoveToBlockGoal {
         return reducedTickDelay(10);
     }
 
+    // Food is a continuous economy (design): farmers always harvest, regardless of the task quota.
     @Override
     public boolean canUse() {
-        return villager.getJob() == Job.FARMER && villager.hasActiveGatherTask() && super.canUse();
+        return villager.getJob() == Job.FARMER && super.canUse();
     }
 
     @Override
     public boolean canContinueToUse() {
-        return villager.getJob() == Job.FARMER && villager.hasActiveGatherTask()
-                && super.canContinueToUse();
+        return villager.getJob() == Job.FARMER && super.canContinueToUse();
     }
 
     /** Targets fully grown crops. */
