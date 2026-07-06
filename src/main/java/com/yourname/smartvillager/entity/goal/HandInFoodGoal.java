@@ -67,7 +67,8 @@ public class HandInFoodGoal extends Goal {
         }
         if (villager.distanceToSqr(manager) <= 9.0D) {
             for (ItemStack food : villager.extractFood(64)) {
-                villager.tossItemToward(food, manager.getX(), manager.getEyeY(), manager.getZ());
+                villager.tossItemToward(food, manager.getX(), manager.getEyeY(), manager.getZ(),
+                        manager.getUUID());
             }
         } else if (villager.getNavigation().isDone()) {
             moveToManager();

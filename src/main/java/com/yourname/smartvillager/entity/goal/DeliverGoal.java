@@ -72,7 +72,8 @@ public class DeliverGoal extends Goal {
             if (slot >= 0) {
                 ItemStack stack = villager.getInventory().getItem(slot);
                 villager.getInventory().setItem(slot, ItemStack.EMPTY);
-                villager.tossItemToward(stack, target.getX(), target.getEyeY(), target.getZ());
+                villager.tossItemToward(stack, target.getX(), target.getEyeY(), target.getZ(),
+                        target.getUUID());
             }
         } else if (villager.getNavigation().isDone()) {
             moveToTarget();

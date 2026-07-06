@@ -201,7 +201,8 @@ public class VillageManager extends SavedData {
         }
         for (SmartVillager recipient : recipients) {
             for (ItemStack food : manager.extractFood(share)) {
-                manager.tossItemToward(food, recipient.getX(), recipient.getEyeY(), recipient.getZ());
+                manager.tossItemToward(food, recipient.getX(), recipient.getEyeY(), recipient.getZ(),
+                        recipient.getUUID());
             }
         }
         SmartVillagerMod.LOGGER.info("Village {} manager distributed food: {} total, {} each",

@@ -317,12 +317,16 @@ public class SmartVillager extends AgeableMob {
     public static final String SHARE_TAG = "SmartVillagerShare";
     /** NBT key on a shared item entity storing the thrower's UUID (so it isn't self-picked-up). */
     public static final String SHARE_THROWER = "SmartVillagerShareThrower";
+    /** NBT key storing the intended recipient's UUID, so only that villager may pick it up. */
+    public static final String SHARE_TARGET = "SmartVillagerShareTarget";
 
     /**
      * Tosses a stack toward a point, exactly like a player dropping an item: it spawns a moving
-     * {@link ItemEntity} tagged as a share, so a recipient villager can pick it into its inventory.
+     * {@link ItemEntity} tagged as a share addressed to {@code recipient}, so only that villager
+     * picks it up (no one intercepts it mid-flight).
      */
-    public void tossItemToward(ItemStack stack, double tx, double ty, double tz) {
+    public void tossItemToward(ItemStack stack, double tx, double ty, double tz,
+                               @Nullable UUID recipient) {
         if (stack.isEmpty()) {
             return;
         }
@@ -336,17 +340,34 @@ public class SmartVillager extends AgeableMob {
         item.setDeltaMovement(dx / len * 0.3D, 0.15D, dz / len * 0.3D);
         item.getPersistentData().putBoolean(SHARE_TAG, true);
         item.getPersistentData().putUUID(SHARE_THROWER, getUUID());
+        if (recipient != null) {
+            item.getPersistentData().putUUID(SHARE_TARGET, recipient);
+        }
         item.setDefaultPickUpDelay();
         level().addFreshEntity(item);
         swing(InteractionHand.MAIN_HAND);
     }
 
-    /** Picks up nearby villager-shared item entities (thrown by others) into this inventory. */
+    /** @return whether this villager is the intended recipient of a shared item (and didn't throw it). */
+    private boolean isPickableShare(ItemEntity item) {
+        if (!item.isAlive()) {
+            return false;
+        }
+        var data = item.getPersistentData();
+        if (!data.getBoolean(SHARE_TAG)) {
+            return false;
+        }
+        if (data.hasUUID(SHARE_THROWER) && getUUID().equals(data.getUUID(SHARE_THROWER))) {
+            return false;
+        }
+        // Only the addressed recipient may take it (untargeted shares are free for anyone).
+        return !data.hasUUID(SHARE_TARGET) || getUUID().equals(data.getUUID(SHARE_TARGET));
+    }
+
+    /** Picks up nearby villager-shared item entities addressed to this villager. */
     private void tickPickup(ServerLevel level) {
         List<ItemEntity> nearby = level.getEntitiesOfClass(ItemEntity.class,
-                getBoundingBox().inflate(1.0D, 0.5D, 1.0D),
-                it -> it.isAlive() && it.getPersistentData().getBoolean(SHARE_TAG)
-                        && !getUUID().equals(it.getPersistentData().getUUID(SHARE_THROWER)));
+                getBoundingBox().inflate(1.0D, 0.5D, 1.0D), this::isPickableShare);
         for (ItemEntity item : nearby) {
             ItemStack stack = item.getItem();
             ItemStack leftover = inventory.addItem(stack.copy());
