@@ -12,6 +12,7 @@ import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +47,8 @@ public class Village {
     private final Map<ResourceType, Integer> storage = new EnumMap<>(ResourceType.class);
     /** Crafted tool stock per tier (design section 10). */
     private final Map<ToolTier, Integer> toolStock = new EnumMap<>(ToolTier.class);
+    /** Which bed (head position) each villager has claimed as its own. */
+    private final Map<BlockPos, UUID> claimedBeds = new HashMap<>();
 
     /**
      * Game-time tick at which the grace period ends while {@link VillageState#INACTIVE}.
@@ -279,6 +282,30 @@ public class Village {
         }
     }
 
+    // --- Bed ownership -----------------------------------------------------
+
+    public Map<BlockPos, UUID> getClaimedBeds() {
+        return claimedBeds;
+    }
+
+    public boolean isBedClaimed(BlockPos bedHead) {
+        return claimedBeds.containsKey(bedHead);
+    }
+
+    /** Claims a bed for an owner if it isn't already taken. @return true if newly claimed. */
+    public boolean claimBed(BlockPos bedHead, UUID owner) {
+        if (claimedBeds.containsKey(bedHead)) {
+            return false;
+        }
+        claimedBeds.put(bedHead.immutable(), owner);
+        return true;
+    }
+
+    /** Releases all beds owned by the given villager (e.g. on death). */
+    public void releaseBedsOf(UUID owner) {
+        claimedBeds.values().removeIf(owner::equals);
+    }
+
     // --- Demand queue (transient) ------------------------------------------
 
     public List<VillagerTask> getDemandQueue() {
@@ -325,6 +352,15 @@ public class Village {
         }
         tag.put("Tools", tools);
 
+        ListTag beds = new ListTag();
+        for (Map.Entry<BlockPos, UUID> e : claimedBeds.entrySet()) {
+            CompoundTag entry = new CompoundTag();
+            entry.put("Pos", NbtUtils.writeBlockPos(e.getKey()));
+            entry.putUUID("Owner", e.getValue());
+            beds.add(entry);
+        }
+        tag.put("ClaimedBeds", beds);
+
         return tag;
     }
 
@@ -368,6 +404,13 @@ public class Village {
             if (tier != null) {
                 village.toolStock.put(tier, tools.getInt(key));
             }
+        }
+
+        ListTag beds = tag.getList("ClaimedBeds", Tag.TAG_COMPOUND);
+        for (int i = 0; i < beds.size(); i++) {
+            CompoundTag entry = beds.getCompound(i);
+            village.claimedBeds.put(
+                    NbtUtils.readBlockPos(entry.getCompound("Pos")), entry.getUUID("Owner"));
         }
 
         return village;

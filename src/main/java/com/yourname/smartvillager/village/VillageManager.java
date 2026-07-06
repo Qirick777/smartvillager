@@ -206,6 +206,7 @@ public class VillageManager extends SavedData {
         if (village.removeMember(id) && job != null) {
             village.decrementJobCount(job);
         }
+        village.releaseBedsOf(id);
         setDirty();
     }
 

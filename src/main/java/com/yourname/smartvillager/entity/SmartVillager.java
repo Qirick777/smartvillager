@@ -8,15 +8,21 @@ import com.yourname.smartvillager.entity.goal.CraftToolGoal;
 import com.yourname.smartvillager.entity.goal.FarmGoal;
 import com.yourname.smartvillager.entity.goal.GatherAtVillageGoal;
 import com.yourname.smartvillager.entity.goal.MineGoal;
+import com.yourname.smartvillager.registry.ModItems;
 import com.yourname.smartvillager.village.Village;
 import com.yourname.smartvillager.village.VillageManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,8 +40,11 @@ import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 
 import javax.annotation.Nullable;
 
@@ -63,6 +72,17 @@ public class SmartVillager extends AgeableMob {
     private int foodStock = INITIAL_FOOD_STOCK;
     /** Last meal slot (0=morning, 1=noon, 2=evening); -1 until first evaluated. */
     private int lastMealSlot = -1;
+
+    /** Number of personal inventory slots each villager carries. */
+    public static final int INVENTORY_SIZE = 10;
+    /** The villager's personal 10-slot inventory (real item stacks). */
+    private final SimpleContainer inventory = new SimpleContainer(INVENTORY_SIZE);
+    /** Head position of this villager's claimed bed, or {@code null} if none. */
+    @Nullable
+    private BlockPos bedPos;
+    /** Position of this villager's personal chest (placed beside its bed), or {@code null}. */
+    @Nullable
+    private BlockPos chestPos;
 
     // --- Block-breaking controller (reusable by work goals) ----------------
     /** Ticks of "mining time" per point of block hardness (leaves 0.2 -> ~6 ticks). */
@@ -165,8 +185,122 @@ public class SmartVillager extends AgeableMob {
         if (villageCorePos == null && this.tickCount % 20 == 0) {
             VillageManager.get(serverLevel).tryJoinAndAssign(serverLevel, this);
         }
+        if (bedPos == null && villageCorePos != null && this.tickCount % 40 == 0) {
+            tickHomeClaim(serverLevel);
+        }
         tickMeals(serverLevel);
         tickBreaking(serverLevel);
+    }
+
+    // --- Home: claim a bed + free chest ------------------------------------
+
+    public SimpleContainer getInventory() {
+        return inventory;
+    }
+
+    @Nullable
+    public BlockPos getBedPos() {
+        return bedPos;
+    }
+
+    @Nullable
+    public BlockPos getChestPos() {
+        return chestPos;
+    }
+
+    /** Claims a nearby unclaimed bed and places a free personal chest beside it. */
+    private void tickHomeClaim(ServerLevel level) {
+        Village village = VillageManager.get(level).getVillageAtCore(villageCorePos);
+        if (village == null) {
+            return;
+        }
+        BlockPos bedHead = findUnclaimedBed(level, village);
+        if (bedHead == null || !village.claimBed(bedHead, getUUID())) {
+            return;
+        }
+        this.bedPos = bedHead;
+        this.chestPos = placeFreeChest(level, bedHead);
+        VillageManager.get(level).setDirty();
+        SmartVillagerMod.LOGGER.info("Villager {} claimed bed {} (chest {})",
+                getUUID(), bedHead, chestPos);
+    }
+
+    /** Finds the nearest unclaimed bed head within a box around this villager. */
+    @Nullable
+    private BlockPos findUnclaimedBed(ServerLevel level, Village village) {
+        int horizontal = 24;
+        int vertical = 6;
+        BlockPos origin = blockPosition();
+        BlockPos best = null;
+        double bestSq = Double.MAX_VALUE;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dy = -vertical; dy <= vertical; dy++) {
+            for (int dx = -horizontal; dx <= horizontal; dx++) {
+                for (int dz = -horizontal; dz <= horizontal; dz++) {
+                    cursor.set(origin.getX() + dx, origin.getY() + dy, origin.getZ() + dz);
+                    BlockState state = level.getBlockState(cursor);
+                    if (!(state.getBlock() instanceof BedBlock)
+                            || state.getValue(BedBlock.PART) != BedPart.HEAD
+                            || village.isBedClaimed(cursor)) {
+                        continue;
+                    }
+                    double d = cursor.distSqr(origin);
+                    if (d < bestSq) {
+                        bestSq = d;
+                        best = cursor.immutable();
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    /** Places the villager's free chest in a replaceable spot beside the bed head. */
+    @Nullable
+    private BlockPos placeFreeChest(ServerLevel level, BlockPos bedHead) {
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
+            BlockPos side = bedHead.relative(dir);
+            if (level.getBlockState(side).isAir()) {
+                level.setBlockAndUpdate(side, Blocks.CHEST.defaultBlockState());
+                return side;
+            }
+        }
+        // Fallback: force the chest on the east side.
+        BlockPos side = bedHead.east();
+        level.setBlockAndUpdate(side, Blocks.CHEST.defaultBlockState());
+        return side;
+    }
+
+    // --- Inspector tool ----------------------------------------------------
+
+    @Override
+    public InteractionResult mobInteract(Player player, InteractionHand hand) {
+        if (player.getItemInHand(hand).is(ModItems.VILLAGER_INSPECTOR.get())) {
+            if (!level().isClientSide) {
+                player.sendSystemMessage(describeInventory());
+            }
+            return InteractionResult.sidedSuccess(level().isClientSide);
+        }
+        return super.mobInteract(player, hand);
+    }
+
+    private Component describeInventory() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Smart Villager [").append(job == null ? "no job" : job.name()).append("] inventory:");
+        boolean any = false;
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (!stack.isEmpty()) {
+                sb.append("\n  [").append(i).append("] ")
+                        .append(stack.getCount()).append("x ")
+                        .append(stack.getHoverName().getString());
+                any = true;
+            }
+        }
+        if (!any) {
+            sb.append(" (empty, ").append(INVENTORY_SIZE).append(" slots)");
+        }
+        return Component.literal(sb.toString());
     }
 
     // --- Block-breaking controller -----------------------------------------
@@ -285,6 +419,13 @@ public class SmartVillager extends AgeableMob {
             tag.put("VillageCore", NbtUtils.writeBlockPos(villageCorePos));
         }
         tag.putInt("FoodStock", foodStock);
+        tag.put("Inventory", inventory.createTag());
+        if (bedPos != null) {
+            tag.put("BedPos", NbtUtils.writeBlockPos(bedPos));
+        }
+        if (chestPos != null) {
+            tag.put("ChestPos", NbtUtils.writeBlockPos(chestPos));
+        }
     }
 
     @Override
@@ -297,6 +438,11 @@ public class SmartVillager extends AgeableMob {
         if (tag.contains("FoodStock")) {
             this.foodStock = tag.getInt("FoodStock");
         }
+        inventory.fromTag(tag.getList("Inventory", 10)); // 10 = TAG_COMPOUND
+        this.bedPos = tag.contains("BedPos") ? NbtUtils.readBlockPos(tag.getCompound("BedPos")) : null;
+        this.chestPos = tag.contains("ChestPos")
+                ? NbtUtils.readBlockPos(tag.getCompound("ChestPos"))
+                : null;
     }
 
     /** No breeding yet (Phase 9); required by {@link AgeableMob}. */

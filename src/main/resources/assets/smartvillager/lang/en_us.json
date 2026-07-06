@@ -1,6 +1,7 @@
 {
   "block.smartvillager.village_core": "Village Core",
   "item.smartvillager.smart_villager_spawn_egg": "Smart Villager Spawn Egg",
+  "item.smartvillager.villager_inspector": "Villager Inspector",
   "entity.smartvillager.smart_villager": "Smart Villager",
   "itemGroup.smartvillager": "Smart Villager",
   "message.smartvillager.out_of_range": "Too far from a Village Core (within 64 blocks required)."

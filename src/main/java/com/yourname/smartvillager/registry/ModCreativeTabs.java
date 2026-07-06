@@ -34,6 +34,7 @@ public final class ModCreativeTabs {
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.VILLAGE_CORE.get());
                         output.accept(ModItems.SMART_VILLAGER_SPAWN_EGG.get());
+                        output.accept(ModItems.VILLAGER_INSPECTOR.get());
                     })
                     .build());
 
@@ -53,6 +54,8 @@ public final class ModCreativeTabs {
             event.accept(ModItems.VILLAGE_CORE.get());
         } else if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
             event.accept(ModItems.SMART_VILLAGER_SPAWN_EGG.get());
+        } else if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
+            event.accept(ModItems.VILLAGER_INSPECTOR.get());
         }
     }
 }

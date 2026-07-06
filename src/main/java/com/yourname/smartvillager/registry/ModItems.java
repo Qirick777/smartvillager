@@ -34,6 +34,11 @@ public final class ModItems {
                     () -> new SmartVillagerSpawnEggItem(ModEntities.SMART_VILLAGER,
                             0x5D7C43, 0x3B4A2C, new Item.Properties()));
 
+    /** Debug tool: right-click a Smart Villager to print its 10-slot inventory. */
+    public static final RegistryObject<Item> VILLAGER_INSPECTOR =
+            ITEMS.register("villager_inspector",
+                    () -> new Item(new Item.Properties().stacksTo(1)));
+
     /**
      * Attaches this registry to the given mod event bus.
      *
