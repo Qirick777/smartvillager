@@ -628,7 +628,14 @@ public class SmartVillager extends AgeableMob {
         }
     }
 
-    /** Consumes one food per meal at the three daily meal boundaries (design section 6). */
+    /** Upper bound of the personal food buffer (design breeding threshold is 5). */
+    private static final int FOOD_STOCK_MAX = 10;
+
+    /**
+     * At each of the three daily meal times, the villager eats one real food item from its
+     * inventory (the food the manager distributed). Eating tops up its buffer; a missed meal (no
+     * food on hand) depletes it (design section 6).
+     */
     private void tickMeals(ServerLevel level) {
         long dayTime = level.getDayTime() % 24000L;
         int slot = dayTime < 6000L ? 0 : (dayTime < 12000L ? 1 : 2);
@@ -641,19 +648,26 @@ public class SmartVillager extends AgeableMob {
         }
         lastMealSlot = slot;
 
-        if (foodStock > 0) {
-            foodStock--;
-        } else if (villageCorePos != null) {
-            // Own buffer empty: eat from communal storage if the village has any FOOD.
-            VillageManager manager = VillageManager.get(level);
-            Village village = manager.getVillageAtCore(villageCorePos);
-            if (village != null && village.getStorage(ResourceType.FOOD) > 0) {
-                village.addStorage(ResourceType.FOOD, -1);
-                manager.setDirty();
+        boolean ate = eatOneFoodItem();
+        if (ate) {
+            foodStock = Math.min(FOOD_STOCK_MAX, foodStock + 1);
+        } else {
+            foodStock = Math.max(0, foodStock - 1);
+        }
+        SmartVillagerMod.LOGGER.info("Villager {} meal (slot {}): ate={} foodStock={}",
+                getUUID(), slot, ate, foodStock);
+    }
+
+    /** Eats one food item from the inventory. @return true if something was eaten. */
+    private boolean eatOneFoodItem() {
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (isFoodItem(stack)) {
+                stack.shrink(1);
+                return true;
             }
         }
-        SmartVillagerMod.LOGGER.info("Villager {} meal (slot {}): foodStock={}",
-                getUUID(), slot, foodStock);
+        return false;
     }
 
     @Override
