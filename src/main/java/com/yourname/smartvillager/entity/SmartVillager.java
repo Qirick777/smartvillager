@@ -298,6 +298,8 @@ public class SmartVillager extends AgeableMob {
 
     /** NBT flag marking an item entity as a villager-to-villager share (so only villagers grab it). */
     public static final String SHARE_TAG = "SmartVillagerShare";
+    /** NBT key on a shared item entity storing the thrower's UUID (so it isn't self-picked-up). */
+    public static final String SHARE_THROWER = "SmartVillagerShareThrower";
 
     /**
      * Tosses a stack toward a point, exactly like a player dropping an item: it spawns a moving
@@ -315,8 +317,8 @@ public class SmartVillager extends AgeableMob {
         double dz = tz - sz;
         double len = Math.max(1.0E-4D, Math.sqrt(dx * dx + dz * dz));
         item.setDeltaMovement(dx / len * 0.3D, 0.15D, dz / len * 0.3D);
-        item.setThrower(getUUID());
         item.getPersistentData().putBoolean(SHARE_TAG, true);
+        item.getPersistentData().putUUID(SHARE_THROWER, getUUID());
         item.setDefaultPickUpDelay();
         level().addFreshEntity(item);
         swing(InteractionHand.MAIN_HAND);
@@ -327,7 +329,7 @@ public class SmartVillager extends AgeableMob {
         List<ItemEntity> nearby = level.getEntitiesOfClass(ItemEntity.class,
                 getBoundingBox().inflate(1.0D, 0.5D, 1.0D),
                 it -> it.isAlive() && it.getPersistentData().getBoolean(SHARE_TAG)
-                        && !getUUID().equals(it.getThrower()));
+                        && !getUUID().equals(it.getPersistentData().getUUID(SHARE_THROWER)));
         for (ItemEntity item : nearby) {
             ItemStack stack = item.getItem();
             ItemStack leftover = inventory.addItem(stack.copy());
