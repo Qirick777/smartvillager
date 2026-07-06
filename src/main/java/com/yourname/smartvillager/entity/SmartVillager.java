@@ -14,6 +14,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -31,6 +33,8 @@ import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockState;
 
 import javax.annotation.Nullable;
 
@@ -58,6 +62,16 @@ public class SmartVillager extends AgeableMob {
     private int foodStock = INITIAL_FOOD_STOCK;
     /** Last meal slot (0=morning, 1=noon, 2=evening); -1 until first evaluated. */
     private int lastMealSlot = -1;
+
+    // --- Block-breaking controller (reusable by work goals) ----------------
+    /** Ticks of "mining time" per point of block hardness (leaves 0.2 -> ~6 ticks). */
+    private static final float BREAK_TICKS_PER_HARDNESS = 30.0F;
+
+    @Nullable
+    private BlockPos breakTarget;
+    private int breakProgressTicks;
+    private int breakTotalTicks;
+    private int lastBreakStage = -1;
 
     public SmartVillager(EntityType<? extends SmartVillager> type, Level level) {
         super(type, level);
@@ -150,6 +164,73 @@ public class SmartVillager extends AgeableMob {
             VillageManager.get(serverLevel).tryJoinAndAssign(serverLevel, this);
         }
         tickMeals(serverLevel);
+        tickBreaking(serverLevel);
+    }
+
+    // --- Block-breaking controller -----------------------------------------
+    // A reusable, player-like block breaker: a work goal points it at an obstructing/target block
+    // and it mines that block over time (crack animation, hit sounds, hardness-based speed), then
+    // destroys it (break sound + particles). Currently used to clear leaves in the carpenter's way;
+    // it works on any block, so other jobs can reuse it later.
+
+    /** Point the breaker at {@code pos}; restarts progress if it's a new block. */
+    public void startBreaking(BlockPos pos) {
+        if (pos.equals(breakTarget)) {
+            return;
+        }
+        clearBreakProgress();
+        breakTarget = pos.immutable();
+        breakProgressTicks = 0;
+        lastBreakStage = -1;
+        float hardness = level().getBlockState(pos).getDestroySpeed(level(), pos);
+        breakTotalTicks = hardness < 0.0F
+                ? Integer.MAX_VALUE
+                : Math.max(1, (int) (hardness * BREAK_TICKS_PER_HARDNESS));
+    }
+
+    /** Stop breaking and clear any crack overlay. */
+    public void stopBreaking() {
+        clearBreakProgress();
+        breakTarget = null;
+        lastBreakStage = -1;
+    }
+
+    private void clearBreakProgress() {
+        if (breakTarget != null && level() instanceof ServerLevel serverLevel) {
+            serverLevel.destroyBlockProgress(getId(), breakTarget, -1);
+        }
+    }
+
+    private void tickBreaking(ServerLevel level) {
+        if (breakTarget == null) {
+            return;
+        }
+        BlockState state = level.getBlockState(breakTarget);
+        boolean tooFar = distanceToSqr(breakTarget.getX() + 0.5D, breakTarget.getY() + 0.5D,
+                breakTarget.getZ() + 0.5D) > 20.0D;
+        if (state.isAir() || tooFar) {
+            stopBreaking();
+            return;
+        }
+
+        breakProgressTicks++;
+        if (breakProgressTicks % 4 == 1) {
+            swing(InteractionHand.MAIN_HAND);
+            SoundType sound = state.getSoundType();
+            level.playSound(null, breakTarget, sound.getHitSound(), SoundSource.BLOCKS,
+                    0.25F, sound.getPitch() * 0.5F);
+        }
+
+        int stage = (int) (10.0F * breakProgressTicks / breakTotalTicks);
+        if (stage != lastBreakStage) {
+            lastBreakStage = stage;
+            level.destroyBlockProgress(getId(), breakTarget, Math.min(9, stage));
+        }
+
+        if (breakProgressTicks >= breakTotalTicks) {
+            level.destroyBlock(breakTarget, false); // break sound + particles (levelEvent 2001)
+            stopBreaking();
+        }
     }
 
     /** Consumes one food per meal at the three daily meal boundaries (design section 6). */

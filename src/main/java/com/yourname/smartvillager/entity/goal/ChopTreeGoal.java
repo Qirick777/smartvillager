@@ -81,9 +81,60 @@ public class ChopTreeGoal extends MoveToBlockGoal {
     @Override
     public void tick() {
         super.tick();
-        if (this.isReachedTarget() && this.villager.level() instanceof ServerLevel serverLevel) {
-            fellTree(serverLevel);
+        if (!(this.villager.level() instanceof ServerLevel serverLevel)) {
+            return;
         }
+        if (this.isReachedTarget()) {
+            this.villager.stopBreaking();
+            fellTree(serverLevel);
+            return;
+        }
+        // Still approaching: if leaves block the way, break through them like a player would.
+        BlockPos leaf = findObstructingLeaf(serverLevel);
+        if (leaf != null) {
+            this.villager.getLookControl().setLookAt(
+                    leaf.getX() + 0.5D, leaf.getY() + 0.5D, leaf.getZ() + 0.5D);
+            this.villager.startBreaking(leaf);
+        } else {
+            this.villager.stopBreaking();
+        }
+    }
+
+    @Override
+    public void stop() {
+        super.stop();
+        this.villager.stopBreaking();
+    }
+
+    /**
+     * Finds a leaf block near the villager that lies between it and the trunk (closer to the target
+     * than the villager) and is within reach — i.e. one that is blocking the approach.
+     */
+    private BlockPos findObstructingLeaf(ServerLevel level) {
+        BlockPos target = this.blockPos;
+        BlockPos self = this.villager.blockPosition();
+        double selfToTargetSq = self.distSqr(target);
+        BlockPos best = null;
+        double bestReachSq = Double.MAX_VALUE;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dy = -1; dy <= 2; dy++) {
+                for (int dz = -2; dz <= 2; dz++) {
+                    cursor.set(self.getX() + dx, self.getY() + dy, self.getZ() + dz);
+                    if (!level.getBlockState(cursor).is(BlockTags.LEAVES)
+                            || cursor.distSqr(target) >= selfToTargetSq) {
+                        continue;
+                    }
+                    double reachSq = this.villager.distanceToSqr(
+                            cursor.getX() + 0.5D, cursor.getY() + 0.5D, cursor.getZ() + 0.5D);
+                    if (reachSq <= 9.0D && reachSq < bestReachSq) {
+                        bestReachSq = reachSq;
+                        best = cursor.immutable();
+                    }
+                }
+            }
+        }
+        return best;
     }
 
     private void fellTree(ServerLevel level) {
