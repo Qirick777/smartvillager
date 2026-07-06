@@ -15,12 +15,19 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.animal.Chicken;
+import net.minecraft.world.entity.animal.Cow;
+import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 
@@ -60,7 +67,8 @@ public class SmartVillager extends AgeableMob {
         return AgeableMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.5D)
-                .add(Attributes.FOLLOW_RANGE, 32.0D);
+                .add(Attributes.FOLLOW_RANGE, 32.0D)
+                .add(Attributes.ATTACK_DAMAGE, 3.0D);
     }
 
     @Override
@@ -70,8 +78,19 @@ public class SmartVillager extends AgeableMob {
         this.goalSelector.addGoal(2, new FarmGoal(this, 0.8D, 12));
         this.goalSelector.addGoal(2, new ChopTreeGoal(this, 0.8D, 12));
         this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.6D));
+        this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.2D, true));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
+
+        // HUNTER targeting: only sheep/cows/chickens, and only while this villager is a hunter.
+        this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(
+                this, Animal.class, 10, true, false, this::isHuntTarget));
+    }
+
+    /** @return true if this villager is a hunter and the entity is a valid quarry (design 9). */
+    public boolean isHuntTarget(LivingEntity entity) {
+        return job == Job.HUNTER
+                && (entity instanceof Sheep || entity instanceof Cow || entity instanceof Chicken);
     }
 
     // --- Job / village membership ------------------------------------------
