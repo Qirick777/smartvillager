@@ -50,6 +50,7 @@ public final class HuntRewardHandler {
             villager.addVillageResource(ResourceType.FOOD, FOOD_PER_CHICKEN);
             villager.giveItem(new ItemStack(Items.CHICKEN, 1));
         }
+        villager.reportProduced(1); // quota progress (1 per kill)
     }
 
     /**

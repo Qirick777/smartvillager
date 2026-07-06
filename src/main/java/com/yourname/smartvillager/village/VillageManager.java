@@ -154,6 +154,8 @@ public class VillageManager extends SavedData {
         village.resetJobCountsToOneEach();
         SmartVillagerMod.LOGGER.info("Initial job assignment complete for village {} ({} jobs)",
                 village.getCorePos(), assigned);
+        // Give the fresh workers an initial demand plan so they start working immediately.
+        recalculateDemand(village);
     }
 
     // --- Demand calculation (manager, design section 8) --------------------

@@ -5,6 +5,7 @@ import com.yourname.smartvillager.data.ResourceType;
 import com.yourname.smartvillager.data.ToolTier;
 import com.yourname.smartvillager.demand.DemandContext;
 import com.yourname.smartvillager.demand.DemandTask;
+import com.yourname.smartvillager.demand.TaskState;
 import com.yourname.smartvillager.task.VillagerTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -345,7 +346,34 @@ public class Village implements DemandContext {
 
     @Override
     public int storage(ResourceType type) {
-        return getStorage(type);
+        // The demand engine works in natural units; convert milli-tracked resources down.
+        int raw = getStorage(type);
+        return type.isMilliUnit() ? raw / ResourceType.MILLI_UNIT : raw;
+    }
+
+    /**
+     * Marks a task done and unblocks any parent whose children are now all done
+     * (design v3 section 6-2 completion transitions).
+     */
+    public void onTaskDone(DemandTask task) {
+        task.state = TaskState.DONE;
+        for (UUID parentId : task.parentIds) {
+            DemandTask parent = taskGraph.get(parentId);
+            if (parent == null || parent.state != TaskState.BLOCKED) {
+                continue;
+            }
+            boolean allChildrenDone = true;
+            for (UUID childId : parent.childIds) {
+                DemandTask child = taskGraph.get(childId);
+                if (child == null || child.state != TaskState.DONE) {
+                    allChildrenDone = false;
+                    break;
+                }
+            }
+            if (allChildrenDone) {
+                parent.state = TaskState.READY;
+            }
+        }
     }
 
     @Override

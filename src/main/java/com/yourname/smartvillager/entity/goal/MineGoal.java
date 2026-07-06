@@ -35,12 +35,13 @@ public class MineGoal extends MoveToBlockGoal {
 
     @Override
     public boolean canUse() {
-        return villager.getJob() == Job.MINER && super.canUse();
+        return villager.getJob() == Job.MINER && villager.hasActiveGatherTask() && super.canUse();
     }
 
     @Override
     public boolean canContinueToUse() {
-        return villager.getJob() == Job.MINER && super.canContinueToUse();
+        return villager.getJob() == Job.MINER && villager.hasActiveGatherTask()
+                && super.canContinueToUse();
     }
 
     @Override
@@ -76,6 +77,7 @@ public class MineGoal extends MoveToBlockGoal {
         }
         level.destroyBlock(this.blockPos, false); // no drops; yield goes to village storage
         this.villager.swing(InteractionHand.MAIN_HAND);
+        this.villager.reportProduced(1); // quota progress (1 per block mined)
 
         BlockPos core = this.villager.getVillageCorePos();
         if (core == null) {

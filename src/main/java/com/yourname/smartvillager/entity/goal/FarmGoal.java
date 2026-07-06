@@ -39,12 +39,13 @@ public class FarmGoal extends MoveToBlockGoal {
 
     @Override
     public boolean canUse() {
-        return villager.getJob() == Job.FARMER && super.canUse();
+        return villager.getJob() == Job.FARMER && villager.hasActiveGatherTask() && super.canUse();
     }
 
     @Override
     public boolean canContinueToUse() {
-        return villager.getJob() == Job.FARMER && super.canContinueToUse();
+        return villager.getJob() == Job.FARMER && villager.hasActiveGatherTask()
+                && super.canContinueToUse();
     }
 
     /** Targets fully grown crops. */
@@ -78,7 +79,8 @@ public class FarmGoal extends MoveToBlockGoal {
             level.destroyBlock(this.blockPos, false);
             level.setBlockAndUpdate(this.blockPos, crop.defaultBlockState());
             this.villager.swing(InteractionHand.MAIN_HAND);
-            this.villager.addVillageResource(ResourceType.FOOD, 1); // legacy ledger (until stage 3)
+            this.villager.addVillageResource(ResourceType.FOOD, 1); // legacy ledger
+            this.villager.reportProduced(1); // quota progress
         }
     }
 }

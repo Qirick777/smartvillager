@@ -27,12 +27,14 @@ public class DemandCalculator {
     public static final int FOOD_BUFFER_DAYS = 2;
     public static final int MAX_DEPTH = 10;
 
+    // Stockpile caps in natural units (logs / stone blocks). Balancing-adjustable; kept modest so
+    // the quota is observable in testing rather than requiring dozens of trees.
     public static int woodCap(int pop) {
-        return 32 + pop * 8;
+        return 16 + pop * 2;
     }
 
     public static int stoneCap(int pop) {
-        return 32 + pop * 8;
+        return 16 + pop * 2;
     }
 
     private final DemandContext ctx;
@@ -205,15 +207,18 @@ public class DemandCalculator {
         };
     }
 
-    /** Abstract vanilla-style recipe costs for a craft task, in storage units. */
+    /**
+     * Abstract vanilla-style recipe costs for a craft task, in natural units (logs / blocks /
+     * ingots). {@link DemandContext#storage} is expected to report the same natural units.
+     */
     private static Map<ResourceType, Integer> recipeFor(DemandTask task) {
         if (task.type != TaskType.CRAFT_TOOL) {
             return Map.of();
         }
         return switch (task.targetTier) {
-            case 1 -> Map.of(ResourceType.WOOD, 1000);                 // ~1 log
-            case 2 -> Map.of(ResourceType.WOOD, 125, ResourceType.STONE, 3);
-            case 3 -> Map.of(ResourceType.WOOD, 125, ResourceType.INGOT, 3);
+            case 1 -> Map.of(ResourceType.WOOD, 1);
+            case 2 -> Map.of(ResourceType.WOOD, 1, ResourceType.STONE, 3);
+            case 3 -> Map.of(ResourceType.WOOD, 1, ResourceType.INGOT, 3);
             default -> Map.of();
         };
     }

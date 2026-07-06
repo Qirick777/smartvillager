@@ -54,6 +54,11 @@ public enum TaskType {
         return build;
     }
 
+    /** @return true for the GATHER_* collection tasks. */
+    public boolean isGather() {
+        return name().startsWith("GATHER");
+    }
+
     /** Which gather task produces a given resource (design v3 section 4, {@code gatherTaskFor}). */
     public static TaskType gatherTaskFor(ResourceType resource) {
         return switch (resource) {

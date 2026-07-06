@@ -40,12 +40,13 @@ public class ChopTreeGoal extends MoveToBlockGoal {
 
     @Override
     public boolean canUse() {
-        return villager.getJob() == Job.CARPENTER && super.canUse();
+        return villager.getJob() == Job.CARPENTER && villager.hasActiveGatherTask() && super.canUse();
     }
 
     @Override
     public boolean canContinueToUse() {
-        return villager.getJob() == Job.CARPENTER && super.canContinueToUse();
+        return villager.getJob() == Job.CARPENTER && villager.hasActiveGatherTask()
+                && super.canContinueToUse();
     }
 
     @Override
@@ -160,6 +161,7 @@ public class ChopTreeGoal extends MoveToBlockGoal {
         this.villager.swing(InteractionHand.MAIN_HAND);
         this.villager.giveItem(new ItemStack(Items.OAK_LOG, logs)); // unified wood (design 9)
         this.villager.addVillageResource(ResourceType.WOOD, logs * ResourceType.MILLI_UNIT);
+        this.villager.reportProduced(logs); // quota progress (natural units: logs)
 
         // Replant a sapling on suitable ground where the trunk stood.
         if (level.getBlockState(base.below()).is(BlockTags.DIRT)) {

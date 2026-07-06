@@ -3,6 +3,8 @@ package com.yourname.smartvillager.entity;
 import com.yourname.smartvillager.SmartVillagerMod;
 import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ResourceType;
+import com.yourname.smartvillager.demand.DemandTask;
+import com.yourname.smartvillager.demand.TaskState;
 import com.yourname.smartvillager.entity.goal.ChopTreeGoal;
 import com.yourname.smartvillager.entity.goal.CraftToolGoal;
 import com.yourname.smartvillager.entity.goal.DepositGoal;
@@ -49,6 +51,8 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 
 import javax.annotation.Nullable;
 
+import java.util.UUID;
+
 /**
  * The Smart Villager mob (design document sections 2 and 6).
  *
@@ -73,6 +77,10 @@ public class SmartVillager extends AgeableMob {
     private int foodStock = INITIAL_FOOD_STOCK;
     /** Last meal slot (0=morning, 1=noon, 2=evening); -1 until first evaluated. */
     private int lastMealSlot = -1;
+
+    /** Id of the demand task this villager is currently working on, or {@code null} if idle. */
+    @Nullable
+    private UUID currentTaskId;
 
     /** Number of personal inventory slots each villager carries. */
     public static final int INVENTORY_SIZE = 10;
@@ -127,9 +135,9 @@ public class SmartVillager extends AgeableMob {
                 this, Animal.class, 10, true, false, this::isHuntTarget));
     }
 
-    /** @return true if this villager is a hunter and the entity is a valid quarry (design 9). */
+    /** @return true if this villager is a hunter with quota and the entity is valid quarry. */
     public boolean isHuntTarget(LivingEntity entity) {
-        return job == Job.HUNTER
+        return job == Job.HUNTER && hasActiveGatherTask()
                 && (entity instanceof Sheep || entity instanceof Cow || entity instanceof Chicken);
     }
 
@@ -190,8 +198,82 @@ public class SmartVillager extends AgeableMob {
         if (bedPos == null && villageCorePos != null && this.tickCount % 40 == 0) {
             tickHomeClaim(serverLevel);
         }
+        if (this.tickCount % 20 == 0) {
+            assignTaskIfNeeded(serverLevel);
+        }
         tickMeals(serverLevel);
         tickBreaking(serverLevel);
+    }
+
+    // --- Demand tasks (quota-driven work) ----------------------------------
+
+    @Nullable
+    private Village village(ServerLevel level) {
+        return villageCorePos == null ? null : VillageManager.get(level).getVillageAtCore(villageCorePos);
+    }
+
+    /** @return the demand task this villager is working on, or {@code null}. */
+    @Nullable
+    public DemandTask getCurrentTask() {
+        if (currentTaskId == null || !(level() instanceof ServerLevel serverLevel)) {
+            return null;
+        }
+        Village village = village(serverLevel);
+        return village == null ? null : village.getTaskGraph().get(currentTaskId);
+    }
+
+    /** @return true if this villager has a gather task with remaining quota. */
+    public boolean hasActiveGatherTask() {
+        DemandTask task = getCurrentTask();
+        return task != null && task.type.isGather() && task.amountDone < task.amountRequired
+                && (task.state == TaskState.READY || task.state == TaskState.IN_PROGRESS
+                    || task.state == TaskState.ASSIGNED);
+    }
+
+    /** Credits {@code amount} toward the current gather task; completes it when the quota is met. */
+    public void reportProduced(int amount) {
+        DemandTask task = getCurrentTask();
+        if (task == null || !task.type.isGather()) {
+            return;
+        }
+        task.amountDone += amount;
+        if (task.amountDone >= task.amountRequired && level() instanceof ServerLevel serverLevel) {
+            Village village = village(serverLevel);
+            if (village != null) {
+                village.onTaskDone(task);
+            }
+            currentTaskId = null;
+        }
+    }
+
+    /** Picks the highest-priority READY gather task for this villager's job, if idle. */
+    private void assignTaskIfNeeded(ServerLevel level) {
+        DemandTask current = getCurrentTask();
+        if (current != null && current.state != TaskState.DONE
+                && current.amountDone < current.amountRequired) {
+            return; // still working on a valid task
+        }
+        currentTaskId = null;
+        Village village = village(level);
+        if (village == null || job == null) {
+            return;
+        }
+        DemandTask best = null;
+        for (DemandTask task : village.getTaskGraph().values()) {
+            if (task.assigneeJob != job || !task.type.isGather()
+                    || task.amountDone >= task.amountRequired) {
+                continue;
+            }
+            boolean claimable = task.state == TaskState.READY
+                    || (task.state == TaskState.IN_PROGRESS && task.type.divisible());
+            if (claimable && (best == null || task.effectivePriority > best.effectivePriority)) {
+                best = task;
+            }
+        }
+        if (best != null) {
+            best.state = TaskState.IN_PROGRESS;
+            currentTaskId = best.id;
+        }
     }
 
     // --- Home: claim a bed + free chest ------------------------------------
