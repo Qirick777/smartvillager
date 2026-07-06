@@ -3,6 +3,8 @@ package com.yourname.smartvillager.village;
 import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ResourceType;
 import com.yourname.smartvillager.data.ToolTier;
+import com.yourname.smartvillager.demand.DemandContext;
+import com.yourname.smartvillager.demand.DemandTask;
 import com.yourname.smartvillager.task.VillagerTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -13,6 +15,7 @@ import net.minecraft.nbt.Tag;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,7 +30,7 @@ import java.util.UUID;
  * per village) keeps every village enumerable in a single tick pass and stored in a single
  * {@code data/smartvillager_villages.dat} file.</p>
  */
-public class Village {
+public class Village implements DemandContext {
 
     /** Tier-1 bed recognition radius around the core, in blocks (design: 64). */
     public static final int CORE_RECOGNITION_RADIUS = 64;
@@ -67,6 +70,11 @@ public class Village {
      * regenerated every evening, so it is not persisted to NBT.
      */
     private final List<VillagerTask> demandQueue = new ArrayList<>();
+
+    /** v3 demand graph, recomputed each evening by {@code DemandCalculator}. Transient for now. */
+    private Map<UUID, DemandTask> taskGraph = new LinkedHashMap<>();
+    /** Recognized farmland tiles in the village (design v3). Not yet populated. */
+    private int farmlandCount;
 
     // TODO (Phase 5/8): demandQueue: List<VillagerTask> and houseSites: List<HouseSite> are added
     // once those types exist (manager demand calculation and the architect/schematic system).
@@ -310,6 +318,49 @@ public class Village {
 
     public List<VillagerTask> getDemandQueue() {
         return demandQueue;
+    }
+
+    // --- Demand graph + DemandContext --------------------------------------
+
+    public Map<UUID, DemandTask> getTaskGraph() {
+        return taskGraph;
+    }
+
+    public void setTaskGraph(Map<UUID, DemandTask> taskGraph) {
+        this.taskGraph = taskGraph;
+    }
+
+    public int getFarmlandCount() {
+        return farmlandCount;
+    }
+
+    public void setFarmlandCount(int farmlandCount) {
+        this.farmlandCount = farmlandCount;
+    }
+
+    @Override
+    public int population() {
+        return members.size();
+    }
+
+    @Override
+    public int storage(ResourceType type) {
+        return getStorage(type);
+    }
+
+    @Override
+    public int farmlandCount() {
+        return farmlandCount;
+    }
+
+    @Override
+    public int toolTier(Job job) {
+        return 0; // TODO (S3-B): back this with a per-job tool registry.
+    }
+
+    @Override
+    public boolean toolBroken(Job job) {
+        return false; // TODO (S3-B): track broken tools.
     }
 
     // --- NBT ----------------------------------------------------------------

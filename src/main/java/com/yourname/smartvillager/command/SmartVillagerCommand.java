@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.yourname.smartvillager.SmartVillagerMod;
 import com.yourname.smartvillager.data.ResourceType;
+import com.yourname.smartvillager.demand.DemandTask;
 import com.yourname.smartvillager.entity.SmartVillager;
 import com.yourname.smartvillager.registry.ModEntities;
 import com.yourname.smartvillager.time.DayPhase;
@@ -50,6 +51,7 @@ public final class SmartVillagerCommand {
                 .then(Commands.literal("rescan").executes(ctx -> rescan(ctx.getSource())))
                 .then(Commands.literal("phase").executes(ctx -> phase(ctx.getSource())))
                 .then(Commands.literal("count").executes(ctx -> count(ctx.getSource())))
+                .then(Commands.literal("demand").executes(ctx -> demand(ctx.getSource())))
                 .then(Commands.literal("store")
                         .then(Commands.argument("type", StringArgumentType.word())
                                 .then(Commands.argument("amount", IntegerArgumentType.integer())
@@ -137,6 +139,30 @@ public final class SmartVillagerCommand {
                 () -> Component.literal("Loaded Smart Villagers in this dimension: " + loaded.size()),
                 false);
         return loaded.size();
+    }
+
+    /** Prints the nearest active village's demand graph, most urgent first. */
+    private static int demand(CommandSourceStack source) {
+        ServerLevel level = source.getLevel();
+        Village village = VillageManager.get(level)
+                .findNearestActiveVillage(BlockPos.containing(source.getPosition()));
+        if (village == null) {
+            source.sendFailure(Component.literal("No active village found near you."));
+            return 0;
+        }
+        List<DemandTask> tasks = new java.util.ArrayList<>(village.getTaskGraph().values());
+        tasks.sort((a, b) -> Double.compare(b.effectivePriority, a.effectivePriority));
+        if (tasks.isEmpty()) {
+            source.sendSuccess(() -> Component.literal(
+                    "Demand graph empty (it is recomputed at the evening gathering)."), false);
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Demand graph (" + tasks.size() + ", top first):"),
+                false);
+        for (DemandTask task : tasks) {
+            source.sendSuccess(() -> Component.literal("  " + task), false);
+        }
+        return tasks.size();
     }
 
     /** Debug: add {@code amount} of a resource to the nearest active village's storage. */

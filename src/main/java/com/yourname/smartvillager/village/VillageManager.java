@@ -3,6 +3,7 @@ package com.yourname.smartvillager.village;
 import com.yourname.smartvillager.SmartVillagerMod;
 import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ResourceType;
+import com.yourname.smartvillager.demand.DemandCalculator;
 import com.yourname.smartvillager.entity.SmartVillager;
 import com.yourname.smartvillager.task.TaskType;
 import com.yourname.smartvillager.task.VillagerTask;
@@ -176,6 +177,12 @@ public class VillageManager extends SavedData {
      * sort the queue by shortage rate.
      */
     public void recalculateDemand(Village village) {
+        // v3 demand graph (dependency DAG). Recomputed each evening.
+        village.setTaskGraph(new DemandCalculator(village).recalculate());
+        SmartVillagerMod.LOGGER.info("Village {} demand graph: {} tasks",
+                village.getCorePos().toShortString(), village.getTaskGraph().size());
+
+        // Legacy minimal food demandQueue (still drives the manufacturer's material requests).
         List<VillagerTask> queue = village.getDemandQueue();
         queue.clear();
 
