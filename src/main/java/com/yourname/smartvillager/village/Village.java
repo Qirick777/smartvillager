@@ -235,6 +235,28 @@ public class Village {
         }
     }
 
+    /**
+     * Milli-coal consumed to smelt one ore. Design section 9: smelting one ore uses 0.125 coal,
+     * i.e. {@code 0.125 * }{@link ResourceType#MILLI_UNIT}{@code  = 125} milli-coal — kept as an
+     * integer so there is no floating-point drift.
+     */
+    public static final int COAL_PER_SMELT_MILLI = 125;
+
+    /**
+     * Smelts one RAW_ORE into one INGOT if enough milli-coal is available, using integer math only.
+     *
+     * @return {@code true} if a smelt happened
+     */
+    public boolean trySmeltOre() {
+        if (getStorage(ResourceType.RAW_ORE) >= 1 && getStorage(ResourceType.COAL) >= COAL_PER_SMELT_MILLI) {
+            addStorage(ResourceType.RAW_ORE, -1);
+            addStorage(ResourceType.COAL, -COAL_PER_SMELT_MILLI);
+            addStorage(ResourceType.INGOT, 1);
+            return true;
+        }
+        return false;
+    }
+
     // --- Demand queue (transient) ------------------------------------------
 
     public List<VillagerTask> getDemandQueue() {

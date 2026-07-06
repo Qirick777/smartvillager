@@ -6,6 +6,7 @@ import com.yourname.smartvillager.data.ResourceType;
 import com.yourname.smartvillager.entity.goal.ChopTreeGoal;
 import com.yourname.smartvillager.entity.goal.FarmGoal;
 import com.yourname.smartvillager.entity.goal.GatherAtVillageGoal;
+import com.yourname.smartvillager.entity.goal.MineGoal;
 import com.yourname.smartvillager.village.Village;
 import com.yourname.smartvillager.village.VillageManager;
 import net.minecraft.core.BlockPos;
@@ -77,8 +78,9 @@ public class SmartVillager extends AgeableMob {
         this.goalSelector.addGoal(1, new GatherAtVillageGoal(this, 0.6D));
         this.goalSelector.addGoal(2, new FarmGoal(this, 0.8D, 12));
         this.goalSelector.addGoal(2, new ChopTreeGoal(this, 0.8D, 12));
-        this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.6D));
+        this.goalSelector.addGoal(2, new MineGoal(this, 0.8D, 12));
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.2D, true));
+        this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.6D));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
 
