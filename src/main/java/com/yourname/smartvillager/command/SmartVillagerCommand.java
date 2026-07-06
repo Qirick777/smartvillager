@@ -1,7 +1,10 @@
 package com.yourname.smartvillager.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.yourname.smartvillager.SmartVillagerMod;
+import com.yourname.smartvillager.data.ResourceType;
 import com.yourname.smartvillager.entity.SmartVillager;
 import com.yourname.smartvillager.registry.ModEntities;
 import com.yourname.smartvillager.time.DayPhase;
@@ -46,7 +49,13 @@ public final class SmartVillagerCommand {
                 .then(Commands.literal("village").executes(ctx -> village(ctx.getSource())))
                 .then(Commands.literal("rescan").executes(ctx -> rescan(ctx.getSource())))
                 .then(Commands.literal("phase").executes(ctx -> phase(ctx.getSource())))
-                .then(Commands.literal("count").executes(ctx -> count(ctx.getSource()))));
+                .then(Commands.literal("count").executes(ctx -> count(ctx.getSource())))
+                .then(Commands.literal("store")
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .then(Commands.argument("amount", IntegerArgumentType.integer())
+                                        .executes(ctx -> store(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "type"),
+                                                IntegerArgumentType.getInteger(ctx, "amount")))))));
 
         // Short alias: /sv ...
         dispatcher.register(Commands.literal("sv")
@@ -77,7 +86,8 @@ public final class SmartVillagerCommand {
             source.sendSuccess(() -> Component.literal(line), false);
             source.sendSuccess(() -> Component.literal("   jobs=" + v.getJobCounts()
                     + " storage=" + v.getStorage()), false);
-            source.sendSuccess(() -> Component.literal("   demand=" + v.getDemandQueue()), false);
+            source.sendSuccess(() -> Component.literal("   tools=" + v.getToolStock()
+                    + " demand=" + v.getDemandQueue()), false);
         }
         return villages.size();
     }
@@ -127,5 +137,29 @@ public final class SmartVillagerCommand {
                 () -> Component.literal("Loaded Smart Villagers in this dimension: " + loaded.size()),
                 false);
         return loaded.size();
+    }
+
+    /** Debug: add {@code amount} of a resource to the nearest active village's storage. */
+    private static int store(CommandSourceStack source, String typeName, int amount) {
+        ResourceType type = ResourceType.byName(typeName);
+        if (type == null) {
+            source.sendFailure(Component.literal("Unknown resource '" + typeName
+                    + "'. Try: wood, stone, coal, raw_ore, ingot, wool, food"));
+            return 0;
+        }
+        ServerLevel level = source.getLevel();
+        VillageManager manager = VillageManager.get(level);
+        Village village = manager.findNearestActiveVillage(BlockPos.containing(source.getPosition()));
+        if (village == null) {
+            source.sendFailure(Component.literal("No active village found near you."));
+            return 0;
+        }
+        village.addStorage(type, amount);
+        manager.setDirty();
+        source.sendSuccess(() -> Component.literal(String.format(
+                "%s %+d -> village %s now has %s=%d",
+                type.getSerializedName(), amount, village.getCorePos().toShortString(),
+                type.getSerializedName(), village.getStorage(type))), false);
+        return 1;
     }
 }

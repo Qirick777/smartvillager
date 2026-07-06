@@ -2,6 +2,7 @@ package com.yourname.smartvillager.village;
 
 import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ResourceType;
+import com.yourname.smartvillager.data.ToolTier;
 import com.yourname.smartvillager.task.VillagerTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -43,6 +44,8 @@ public class Village {
     private final Map<Job, Integer> jobCounts = new EnumMap<>(Job.class);
     /** Shared resource storage (WOOD/COAL are in milli-units; see {@link ResourceType}). */
     private final Map<ResourceType, Integer> storage = new EnumMap<>(ResourceType.class);
+    /** Crafted tool stock per tier (design section 10). */
+    private final Map<ToolTier, Integer> toolStock = new EnumMap<>(ToolTier.class);
 
     /**
      * Game-time tick at which the grace period ends while {@link VillageState#INACTIVE}.
@@ -257,6 +260,25 @@ public class Village {
         return false;
     }
 
+    // --- Tools -------------------------------------------------------------
+
+    public Map<ToolTier, Integer> getToolStock() {
+        return toolStock;
+    }
+
+    public int getToolStock(ToolTier tier) {
+        return toolStock.getOrDefault(tier, 0);
+    }
+
+    public void addTool(ToolTier tier, int amount) {
+        int next = Math.max(0, getToolStock(tier) + amount);
+        if (next == 0) {
+            toolStock.remove(tier);
+        } else {
+            toolStock.put(tier, next);
+        }
+    }
+
     // --- Demand queue (transient) ------------------------------------------
 
     public List<VillagerTask> getDemandQueue() {
@@ -297,6 +319,12 @@ public class Village {
         }
         tag.put("Storage", store);
 
+        CompoundTag tools = new CompoundTag();
+        for (Map.Entry<ToolTier, Integer> e : toolStock.entrySet()) {
+            tools.putInt(e.getKey().getSerializedName(), e.getValue());
+        }
+        tag.put("Tools", tools);
+
         return tag;
     }
 
@@ -331,6 +359,14 @@ public class Village {
             ResourceType type = ResourceType.byName(key);
             if (type != null) {
                 village.storage.put(type, store.getInt(key));
+            }
+        }
+
+        CompoundTag tools = tag.getCompound("Tools");
+        for (String key : tools.getAllKeys()) {
+            ToolTier tier = ToolTier.byName(key);
+            if (tier != null) {
+                village.toolStock.put(tier, tools.getInt(key));
             }
         }
 
