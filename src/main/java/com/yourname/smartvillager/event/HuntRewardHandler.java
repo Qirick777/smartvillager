@@ -8,6 +8,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Chicken;
 import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -39,11 +41,14 @@ public final class HuntRewardHandler {
         }
         LivingEntity victim = event.getEntity();
         if (victim instanceof Sheep) {
-            villager.addVillageResource(ResourceType.WOOL, WOOL_PER_SHEEP);
+            villager.addVillageResource(ResourceType.WOOL, WOOL_PER_SHEEP); // legacy ledger
+            villager.giveItem(new ItemStack(Items.WHITE_WOOL, WOOL_PER_SHEEP));
         } else if (victim instanceof Cow) {
             villager.addVillageResource(ResourceType.FOOD, FOOD_PER_COW);
+            villager.giveItem(new ItemStack(Items.BEEF, 2));
         } else if (victim instanceof Chicken) {
             villager.addVillageResource(ResourceType.FOOD, FOOD_PER_CHICKEN);
+            villager.giveItem(new ItemStack(Items.CHICKEN, 1));
         }
     }
 

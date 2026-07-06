@@ -5,6 +5,7 @@ import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ResourceType;
 import com.yourname.smartvillager.entity.goal.ChopTreeGoal;
 import com.yourname.smartvillager.entity.goal.CraftToolGoal;
+import com.yourname.smartvillager.entity.goal.DepositGoal;
 import com.yourname.smartvillager.entity.goal.FarmGoal;
 import com.yourname.smartvillager.entity.goal.GatherAtVillageGoal;
 import com.yourname.smartvillager.entity.goal.MineGoal;
@@ -110,6 +111,7 @@ public class SmartVillager extends AgeableMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new DepositGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new GatherAtVillageGoal(this, 0.6D));
         this.goalSelector.addGoal(2, new FarmGoal(this, 0.8D, 12));
         this.goalSelector.addGoal(2, new ChopTreeGoal(this, 0.8D, 12));
@@ -196,6 +198,23 @@ public class SmartVillager extends AgeableMob {
 
     public SimpleContainer getInventory() {
         return inventory;
+    }
+
+    /** Adds an item to the villager's inventory, dropping any overflow at its feet. */
+    public void giveItem(ItemStack stack) {
+        ItemStack leftover = inventory.addItem(stack);
+        if (!leftover.isEmpty()) {
+            spawnAtLocation(leftover);
+        }
+    }
+
+    /** @return total number of items across all inventory slots. */
+    public int totalInventoryCount() {
+        int total = 0;
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            total += inventory.getItem(i).getCount();
+        }
+        return total;
     }
 
     @Nullable

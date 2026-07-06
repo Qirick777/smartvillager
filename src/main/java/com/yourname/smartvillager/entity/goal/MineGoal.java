@@ -12,6 +12,8 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.MoveToBlockGoal;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -87,11 +89,19 @@ public class MineGoal extends MoveToBlockGoal {
 
         if (state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE)) {
             village.addStorage(ResourceType.STONE, 1);
+            villager.giveItem(new ItemStack(Items.COBBLESTONE));
         } else if (state.is(BlockTags.COAL_ORES)) {
             village.addStorage(ResourceType.COAL, ResourceType.MILLI_UNIT); // 1 coal = 1000 milli
+            villager.giveItem(new ItemStack(Items.COAL));
         } else {
             village.addStorage(ResourceType.RAW_ORE, 1);
+            villager.giveItem(new ItemStack(Items.RAW_IRON));
             boolean smelted = village.trySmeltOre();
+            if (smelted) {
+                // Auto-smelt: swap one raw ore for an ingot in the inventory too.
+                villager.getInventory().removeItemType(Items.RAW_IRON, 1);
+                villager.giveItem(new ItemStack(Items.IRON_INGOT));
+            }
             SmartVillagerMod.LOGGER.info(
                     "Miner smelt={} coalMilli={} rawOre={} ingot={}",
                     smelted, village.getStorage(ResourceType.COAL),

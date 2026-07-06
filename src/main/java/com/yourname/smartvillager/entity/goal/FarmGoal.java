@@ -8,7 +8,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.MoveToBlockGoal;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -69,10 +71,14 @@ public class FarmGoal extends MoveToBlockGoal {
     private void harvest(ServerLevel level) {
         BlockState state = level.getBlockState(this.blockPos);
         if (state.getBlock() instanceof CropBlock crop && crop.isMaxAge(state)) {
-            level.destroyBlock(this.blockPos, false); // harvest with break particles, no drops
-            level.setBlockAndUpdate(this.blockPos, crop.defaultBlockState()); // replant at age 0
+            // Give the real crop drops to the villager's inventory, then replant at age 0.
+            for (ItemStack drop : Block.getDrops(state, level, this.blockPos, null)) {
+                this.villager.giveItem(drop);
+            }
+            level.destroyBlock(this.blockPos, false);
+            level.setBlockAndUpdate(this.blockPos, crop.defaultBlockState());
             this.villager.swing(InteractionHand.MAIN_HAND);
-            this.villager.addVillageResource(ResourceType.FOOD, 1);
+            this.villager.addVillageResource(ResourceType.FOOD, 1); // legacy ledger (until stage 3)
         }
     }
 }

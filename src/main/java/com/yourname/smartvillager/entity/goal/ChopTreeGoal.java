@@ -10,6 +10,8 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.MoveToBlockGoal;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Blocks;
 
@@ -156,6 +158,7 @@ public class ChopTreeGoal extends MoveToBlockGoal {
         }
         clearCanopyLeaves(level, base, topY);
         this.villager.swing(InteractionHand.MAIN_HAND);
+        this.villager.giveItem(new ItemStack(Items.OAK_LOG, logs)); // unified wood (design 9)
         this.villager.addVillageResource(ResourceType.WOOD, logs * ResourceType.MILLI_UNIT);
 
         // Replant a sapling on suitable ground where the trunk stood.
