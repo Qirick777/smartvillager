@@ -71,10 +71,12 @@ public final class SmartVillagerCommand {
                     ? "-"
                     : Math.max(0, v.getGraceDeadlineTick() - now) + "t";
             String line = String.format(
-                    " core=%s state=%s grace=%s beds=%d population=%d members=%d",
+                    " core=%s state=%s grace=%s beds=%d pop=%d assigned=%s",
                     v.getCorePos().toShortString(), v.getState(), grace,
-                    v.getBedCount(), v.getPopulation(), v.getMembers().size());
+                    v.getBedCount(), v.getPopulation(), v.isInitialJobsAssigned());
             source.sendSuccess(() -> Component.literal(line), false);
+            source.sendSuccess(() -> Component.literal("   jobs=" + v.getJobCounts()
+                    + " storage=" + v.getStorage()), false);
         }
         return villages.size();
     }

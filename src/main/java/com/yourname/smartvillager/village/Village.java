@@ -49,6 +49,12 @@ public class Village {
      */
     private long graceDeadlineTick;
 
+    /** Number of members that triggers the one-time initial job assignment (design section 3). */
+    public static final int INITIAL_JOB_COUNT = 7;
+
+    /** Whether the one-time "7 gather -> assign all 7 jobs" batch assignment has happened. */
+    private boolean initialJobsAssigned;
+
     // TODO (Phase 5/8): demandQueue: List<VillagerTask> and houseSites: List<HouseSite> are added
     // once those types exist (manager demand calculation and the architect/schematic system).
 
@@ -117,6 +123,20 @@ public class Village {
         return members;
     }
 
+    /** Adds a member if not already present. @return true if newly added. */
+    public boolean addMember(UUID id) {
+        if (members.contains(id)) {
+            return false;
+        }
+        members.add(id);
+        return true;
+    }
+
+    /** Removes a member. @return true if it was present. */
+    public boolean removeMember(UUID id) {
+        return members.remove(id);
+    }
+
     /** @return current population (design: {@code population}). */
     public int getPopulation() {
         return members.size();
@@ -127,14 +147,85 @@ public class Village {
         return getBedCount() - getPopulation();
     }
 
-    // --- Job counts / storage ----------------------------------------------
+    // --- Jobs --------------------------------------------------------------
+
+    public boolean isInitialJobsAssigned() {
+        return initialJobsAssigned;
+    }
+
+    public void setInitialJobsAssigned(boolean assigned) {
+        this.initialJobsAssigned = assigned;
+    }
 
     public Map<Job, Integer> getJobCounts() {
         return jobCounts;
     }
 
+    public int getJobCount(Job job) {
+        return jobCounts.getOrDefault(job, 0);
+    }
+
+    public void incrementJobCount(Job job) {
+        jobCounts.merge(job, 1, Integer::sum);
+    }
+
+    public void decrementJobCount(Job job) {
+        int next = getJobCount(job) - 1;
+        if (next <= 0) {
+            jobCounts.remove(job);
+        } else {
+            jobCounts.put(job, next);
+        }
+    }
+
+    /** Resets the job tally to exactly one of each job (used by the initial batch assignment). */
+    public void resetJobCountsToOneEach() {
+        jobCounts.clear();
+        for (Job job : Job.VALUES) {
+            jobCounts.put(job, 1);
+        }
+    }
+
+    /**
+     * Picks the job to assign to a newly added member once the village is past its initial
+     * assignment (design section 8, {@code getShortageJob()}).
+     *
+     * <p>TODO (Phase 8): replace this headcount-only stub with the demand-weighted version that
+     * also factors in the recent {@code demandQueue} task history.</p>
+     *
+     * @return the job with the current lowest headcount (ties broken by enum order)
+     */
+    public Job getShortageJob() {
+        Job shortage = Job.VALUES[0];
+        int best = Integer.MAX_VALUE;
+        for (Job job : Job.VALUES) {
+            int count = getJobCount(job);
+            if (count < best) {
+                best = count;
+                shortage = job;
+            }
+        }
+        return shortage;
+    }
+
+    // --- Storage -----------------------------------------------------------
+
     public Map<ResourceType, Integer> getStorage() {
         return storage;
+    }
+
+    public int getStorage(ResourceType type) {
+        return storage.getOrDefault(type, 0);
+    }
+
+    /** Adds (or subtracts, if negative) an amount to a resource, clamped at zero. */
+    public void addStorage(ResourceType type, int amount) {
+        int next = Math.max(0, getStorage(type) + amount);
+        if (next == 0) {
+            storage.remove(type);
+        } else {
+            storage.put(type, next);
+        }
     }
 
     // --- NBT ----------------------------------------------------------------
@@ -145,6 +236,7 @@ public class Village {
         tag.put("CorePos", NbtUtils.writeBlockPos(corePos));
         tag.putString("State", state.name());
         tag.putLong("GraceDeadlineTick", graceDeadlineTick);
+        tag.putBoolean("InitialJobsAssigned", initialJobsAssigned);
 
         ListTag bedList = new ListTag();
         for (BlockPos bed : recognizedBeds) {
@@ -179,6 +271,7 @@ public class Village {
         village.corePos = NbtUtils.readBlockPos(tag.getCompound("CorePos"));
         village.state = parseState(tag.getString("State"));
         village.graceDeadlineTick = tag.getLong("GraceDeadlineTick");
+        village.initialJobsAssigned = tag.getBoolean("InitialJobsAssigned");
 
         ListTag bedList = tag.getList("RecognizedBeds", Tag.TAG_COMPOUND);
         for (int i = 0; i < bedList.size(); i++) {

@@ -1,6 +1,8 @@
 package com.yourname.smartvillager.village;
 
 import com.yourname.smartvillager.SmartVillagerMod;
+import com.yourname.smartvillager.data.Job;
+import com.yourname.smartvillager.entity.SmartVillager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -95,6 +97,71 @@ public class VillageManager extends SavedData {
             }
         }
         return nearest;
+    }
+
+    // --- Membership / job assignment ---------------------------------------
+
+    /**
+     * Attaches a villager to the nearest active village within {@link #SPAWN_RANGE} and assigns a
+     * job (design section 3): fewer than 7 members → left unassigned; the 7th triggers the one-time
+     * batch assignment of all seven jobs; later members get {@link Village#getShortageJob()}.
+     * No-op if the villager already belongs to a village or none is in range.
+     */
+    public void tryJoinAndAssign(ServerLevel level, SmartVillager villager) {
+        if (villager.getVillageCorePos() != null) {
+            return;
+        }
+        Village village = findNearestActiveVillage(villager.blockPosition());
+        if (village == null
+                || village.getCorePos().distSqr(villager.blockPosition()) > (double) SPAWN_RANGE * SPAWN_RANGE) {
+            return;
+        }
+        if (!village.addMember(villager.getUUID())) {
+            return;
+        }
+        villager.setVillageCorePos(village.getCorePos());
+
+        if (!village.isInitialJobsAssigned()) {
+            if (village.getPopulation() >= Village.INITIAL_JOB_COUNT) {
+                assignInitialJobs(level, village);
+            }
+            // Fewer than 7 gathered so far: leave this villager unassigned for now.
+        } else {
+            Job job = village.getShortageJob();
+            villager.setJob(job);
+            village.incrementJobCount(job);
+            SmartVillagerMod.LOGGER.info("Assigned shortage job {} to villager {} (village {})",
+                    job, villager.getUUID(), village.getCorePos());
+        }
+        setDirty();
+    }
+
+    /** Assigns one of each of the seven jobs to the village's (first seven) members. */
+    private void assignInitialJobs(ServerLevel level, Village village) {
+        List<UUID> members = village.getMembers();
+        int assigned = 0;
+        for (int i = 0; i < members.size() && assigned < Job.VALUES.length; i++) {
+            if (level.getEntity(members.get(i)) instanceof SmartVillager member) {
+                member.setJob(Job.VALUES[assigned]);
+                assigned++;
+            }
+        }
+        village.setInitialJobsAssigned(true);
+        village.resetJobCountsToOneEach();
+        SmartVillagerMod.LOGGER.info("Initial job assignment complete for village {} ({} jobs)",
+                village.getCorePos(), assigned);
+    }
+
+    /** Removes a villager from its village (on death/discard), keeping job counts in sync. */
+    public void onMemberRemoved(BlockPos corePos, UUID id, Job job) {
+        Village village = villages.get(corePos.immutable());
+        if (village == null) {
+            return;
+        }
+        if (village.removeMember(id) && job != null) {
+            village.decrementJobCount(job);
+        }
+        setDirty();
     }
 
     // --- Core placement / removal ------------------------------------------
