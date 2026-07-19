@@ -3,7 +3,10 @@ package com.yourname.smartvillager.entity.goal;
 import com.yourname.smartvillager.SmartVillagerMod;
 import com.yourname.smartvillager.data.Job;
 import com.yourname.smartvillager.data.ToolTier;
+import com.yourname.smartvillager.demand.DemandTask;
+import com.yourname.smartvillager.demand.TaskState;
 import com.yourname.smartvillager.entity.SmartVillager;
+import com.yourname.smartvillager.task.TaskType;
 import com.yourname.smartvillager.village.Village;
 import com.yourname.smartvillager.village.VillageManager;
 import net.minecraft.server.level.ServerLevel;
@@ -15,16 +18,16 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 /**
- * MANUFACTURER work goal (design v3 section 7): crafts tools from the material items it has
- * received (via delivery) — 1 log worth of sticks + 3 head material — and holds the finished tool.
- * Upgrades to an iron tool when it has iron ingots, else makes a stone tool. Limited to
- * {@value #CRAFT_BUDGET} crafts per day.
+ * MANUFACTURER work goal: crafts the pickaxe tier the demand graph asks for, from the material
+ * items it has received (design v3). A wood pickaxe needs only logs; stone/iron pickaxes also need
+ * cobblestone / iron ingots. On success it consumes the items, holds the finished tool, and marks
+ * the CRAFT_TOOL task done (which unblocks the gather tasks that were waiting on the tool). Limited
+ * to {@value #CRAFT_BUDGET} crafts per day.
  */
 public class CraftToolGoal extends Goal {
 
-    private static final int CRAFT_INTERVAL_TICKS = 100; // ~5s between attempts
-    private static final int CRAFT_BUDGET = 3;           // per day
-    private static final int MATERIAL_PER_TOOL = 3;
+    private static final int CRAFT_INTERVAL_TICKS = 100;
+    private static final int CRAFT_BUDGET = 3;
 
     private final SmartVillager villager;
     private int cooldown;
@@ -54,7 +57,6 @@ public class CraftToolGoal extends Goal {
         if (!(villager.level() instanceof ServerLevel level)) {
             return;
         }
-
         long day = level.getDayTime() / 24000L;
         if (day != lastCraftDay) {
             lastCraftDay = day;
@@ -63,41 +65,77 @@ public class CraftToolGoal extends Goal {
         if (craftsToday >= CRAFT_BUDGET) {
             return;
         }
-
         Village village = VillageManager.get(level).getVillageAtCore(villager.getVillageCorePos());
-        if (village != null) {
-            craft(level, village);
+        if (village == null) {
+            return;
+        }
+        DemandTask craft = highestCraftTask(village);
+        if (craft == null) {
+            return;
+        }
+        ToolTier tier = ToolTier.byLevel(craft.targetTier);
+        if (tier != null && craftTier(village, tier)) {
+            village.onTaskDone(craft);
+            craftsToday++;
+            VillageManager.get(level).setDirty();
+            SmartVillagerMod.LOGGER.info(
+                    "Manufacturer crafted {} pickaxe (village {}, {}/day): tools={}",
+                    tier, village.getCorePos().toShortString(), craftsToday, village.getToolStock());
         }
     }
 
-    private void craft(ServerLevel level, Village village) {
+    /** @return the highest-priority not-done CRAFT_TOOL task in the graph, or null. */
+    private DemandTask highestCraftTask(Village village) {
+        DemandTask best = null;
+        for (DemandTask task : village.getTaskGraph().values()) {
+            if (task.type == TaskType.CRAFT_TOOL && task.state != TaskState.DONE
+                    && (best == null || task.effectivePriority > best.effectivePriority)) {
+                best = task;
+            }
+        }
+        return best;
+    }
+
+    /** Consumes the tier's materials from inventory and produces a held pickaxe. */
+    private boolean craftTier(Village village, ToolTier tier) {
         SimpleContainer inv = villager.getInventory();
-        if (count(inv, Items.OAK_LOG) < 1) {
-            return; // no wood for sticks yet (delivery/demand will supply it)
+        switch (tier) {
+            case WOOD -> {
+                if (count(inv, Items.OAK_LOG) < 2) {
+                    return false;
+                }
+                inv.removeItemType(Items.OAK_LOG, 2);
+            }
+            case STONE -> {
+                if (count(inv, Items.OAK_LOG) < 1 || count(inv, Items.COBBLESTONE) < 3) {
+                    return false;
+                }
+                inv.removeItemType(Items.OAK_LOG, 1);
+                inv.removeItemType(Items.COBBLESTONE, 3);
+            }
+            case IRON -> {
+                if (count(inv, Items.OAK_LOG) < 1 || count(inv, Items.IRON_INGOT) < 3) {
+                    return false;
+                }
+                inv.removeItemType(Items.OAK_LOG, 1);
+                inv.removeItemType(Items.IRON_INGOT, 3);
+            }
+            default -> {
+                return false;
+            }
         }
-
-        ToolTier tier;
-        Item material;
-        if (count(inv, Items.IRON_INGOT) >= MATERIAL_PER_TOOL) {
-            tier = ToolTier.IRON;
-            material = Items.IRON_INGOT;
-        } else if (count(inv, Items.COBBLESTONE) >= MATERIAL_PER_TOOL) {
-            tier = ToolTier.STONE;
-            material = Items.COBBLESTONE;
-        } else {
-            return; // no head material yet
-        }
-
-        inv.removeItemType(Items.OAK_LOG, 1);
-        inv.removeItemType(material, MATERIAL_PER_TOOL);
         village.addTool(tier, 1);
-        villager.giveItem(new ItemStack(tier == ToolTier.IRON ? Items.IRON_PICKAXE : Items.STONE_PICKAXE));
+        villager.giveItem(new ItemStack(pickaxeItem(tier)));
         villager.swing(InteractionHand.MAIN_HAND);
-        craftsToday++;
-        VillageManager.get(level).setDirty();
-        SmartVillagerMod.LOGGER.info(
-                "Manufacturer crafted {} tool from inventory (village {}, {} today): tools={}",
-                tier, village.getCorePos().toShortString(), craftsToday, village.getToolStock());
+        return true;
+    }
+
+    private static Item pickaxeItem(ToolTier tier) {
+        return switch (tier) {
+            case WOOD -> Items.WOODEN_PICKAXE;
+            case STONE -> Items.STONE_PICKAXE;
+            case IRON -> Items.IRON_PICKAXE;
+        };
     }
 
     private static int count(SimpleContainer inv, Item item) {

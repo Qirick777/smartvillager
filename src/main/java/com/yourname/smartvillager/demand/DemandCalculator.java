@@ -26,6 +26,8 @@ public class DemandCalculator {
     public static final int MEALS_PER_DAY = 3;
     public static final int FOOD_BUFFER_DAYS = 2;
     public static final int MAX_DEPTH = 10;
+    /** Ingot surplus above which a job's desired tool tier is promoted to iron (design v3). */
+    public static final int IRON_SURPLUS_MARGIN = 8;
 
     // Stockpile caps in natural units (logs / stone blocks). Balancing-adjustable; kept modest so
     // the quota is observable in testing rather than requiring dozens of trees.
@@ -115,9 +117,14 @@ public class DemandCalculator {
     private List<DemandTask> collectRootDemands() {
         List<DemandTask> roots = new ArrayList<>();
 
-        // R1: essential tools. For now: the miner's pickaxe (blocks stone/ore gathering).
-        if (ctx.toolTier(Job.MINER) == 0 || ctx.toolBroken(Job.MINER)) {
+        // R1: the miner's pickaxe tier ladder. Bootstrap a wood pickaxe when there is none, then
+        // upgrade toward the desired tier (stone normally; iron only if iron is in surplus).
+        int minerTier = ctx.toolTier(Job.MINER);
+        int desiredTier = available(ResourceType.INGOT) >= IRON_SURPLUS_MARGIN ? 3 : 2;
+        if (minerTier == 0 || ctx.toolBroken(Job.MINER)) {
             roots.add(getOrCreateCraftTool(Job.MINER, 1, Priorities.P2_TOOL_MISSING));
+        } else if (minerTier < desiredTier) {
+            roots.add(getOrCreateCraftTool(Job.MINER, minerTier + 1, Priorities.P6_TOOL_UPGRADE));
         }
 
         // R2: food demand (2-day buffer). Farmland present -> farmers do 70%, else hunters do all.

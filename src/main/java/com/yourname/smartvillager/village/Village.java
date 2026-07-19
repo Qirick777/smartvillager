@@ -53,6 +53,8 @@ public class Village implements DemandContext {
     private final Map<ToolTier, Integer> toolStock = new EnumMap<>(ToolTier.class);
     /** Which bed (head position) each villager has claimed as its own. */
     private final Map<BlockPos, UUID> claimedBeds = new HashMap<>();
+    /** Tool tier currently held per job (0=none, 1=wood, 2=stone, 3=iron). Design v3 toolRegistry. */
+    private final Map<Job, Integer> toolRegistry = new EnumMap<>(Job.class);
 
     /**
      * Game-time tick at which the grace period ends while {@link VillageState#INACTIVE}.
@@ -383,12 +385,21 @@ public class Village implements DemandContext {
 
     @Override
     public int toolTier(Job job) {
-        return 0; // TODO (S3-B): back this with a per-job tool registry.
+        return toolRegistry.getOrDefault(job, 0);
+    }
+
+    /** Records the tool tier a job now holds (updated when a tool is delivered). */
+    public void setToolTier(Job job, int tier) {
+        if (tier <= 0) {
+            toolRegistry.remove(job);
+        } else {
+            toolRegistry.put(job, tier);
+        }
     }
 
     @Override
     public boolean toolBroken(Job job) {
-        return false; // TODO (S3-B): track broken tools.
+        return false; // TODO: track broken tools.
     }
 
     // --- NBT ----------------------------------------------------------------
@@ -440,6 +451,12 @@ public class Village implements DemandContext {
         }
         tag.put("ClaimedBeds", beds);
 
+        CompoundTag toolReg = new CompoundTag();
+        for (Map.Entry<Job, Integer> e : toolRegistry.entrySet()) {
+            toolReg.putInt(e.getKey().getSerializedName(), e.getValue());
+        }
+        tag.put("ToolRegistry", toolReg);
+
         return tag;
     }
 
@@ -490,6 +507,14 @@ public class Village implements DemandContext {
             CompoundTag entry = beds.getCompound(i);
             village.claimedBeds.put(
                     NbtUtils.readBlockPos(entry.getCompound("Pos")), entry.getUUID("Owner"));
+        }
+
+        CompoundTag toolReg = tag.getCompound("ToolRegistry");
+        for (String key : toolReg.getAllKeys()) {
+            Job job = Job.byName(key);
+            if (job != null) {
+                village.toolRegistry.put(job, toolReg.getInt(key));
+            }
         }
 
         return village;

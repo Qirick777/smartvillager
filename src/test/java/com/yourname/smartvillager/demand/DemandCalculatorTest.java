@@ -89,15 +89,19 @@ class DemandCalculatorTest {
     }
 
     @Test
-    void withPickaxe_stoneGatheringNeedsNoCraftChild() {
+    void withWoodPickaxe_stoneGatheringNeedsNoCraftChildButUpgradeIsQueued() {
         FakeContext ctx = new FakeContext();
         ctx.tiers[Job.MINER.ordinal()] = 1; // already has a wood pickaxe
         Map<UUID, DemandTask> graph = new DemandCalculator(ctx).recalculate();
 
-        assertEquals(0, countType(graph, TaskType.CRAFT_TOOL));
+        // Stone gathering is satisfied by the wood pickaxe -> no craft child, terminal.
         DemandTask stone = byKey(graph, "GATHER_STONE:STONE");
         assertNotNull(stone);
         assertTrue(stone.childIds.isEmpty());
         assertEquals(TaskState.READY, stone.state);
+
+        // The tier ladder queues a stone-pickaxe upgrade (desired tier 2).
+        assertNotNull(byKey(graph, "CRAFT_TOOL:MINER:2"));
+        assertNull(byKey(graph, "CRAFT_TOOL:MINER:1"));
     }
 }
