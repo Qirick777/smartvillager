@@ -8,6 +8,7 @@ import com.yourname.smartvillager.demand.TaskState;
 import com.yourname.smartvillager.entity.goal.ChopTreeGoal;
 import com.yourname.smartvillager.entity.goal.CraftToolGoal;
 import com.yourname.smartvillager.entity.goal.DeliverGoal;
+import com.yourname.smartvillager.entity.goal.DeliverToolGoal;
 import com.yourname.smartvillager.entity.goal.DepositGoal;
 import com.yourname.smartvillager.entity.goal.FarmGoal;
 import com.yourname.smartvillager.entity.goal.GatherAtVillageGoal;
@@ -133,6 +134,7 @@ public class SmartVillager extends AgeableMob {
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
         this.goalSelector.addGoal(1, new HandInFoodGoal(this, 0.7D));
+        this.goalSelector.addGoal(1, new DeliverToolGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new DeliverGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new DepositGoal(this, 0.7D));
         this.goalSelector.addGoal(1, new GatherAtVillageGoal(this, 0.6D));
@@ -370,6 +372,11 @@ public class SmartVillager extends AgeableMob {
                 getBoundingBox().inflate(1.0D, 0.5D, 1.0D), this::isPickableShare);
         for (ItemEntity item : nearby) {
             ItemStack stack = item.getItem();
+            if (tryEquipTool(level, stack)) {
+                take(item, 1);
+                item.discard();
+                continue;
+            }
             ItemStack leftover = inventory.addItem(stack.copy());
             int picked = stack.getCount() - leftover.getCount();
             if (picked > 0) {
@@ -381,6 +388,39 @@ public class SmartVillager extends AgeableMob {
                 }
             }
         }
+    }
+
+    /** Equips a received pickaxe in hand and records the tier in the village tool registry. */
+    private boolean tryEquipTool(ServerLevel level, ItemStack stack) {
+        int tier = pickaxeTier(stack);
+        if (tier <= 0 || job != Job.MINER) {
+            return false; // only the miner wields a pickaxe for now
+        }
+        setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(stack.getItem()));
+        if (villageCorePos != null) {
+            VillageManager manager = VillageManager.get(level);
+            Village village = manager.getVillageAtCore(villageCorePos);
+            if (village != null) {
+                village.setToolTier(Job.MINER, tier);
+                manager.setDirty();
+            }
+        }
+        SmartVillagerMod.LOGGER.info("Miner {} equipped {} (tier {})",
+                getUUID(), stack.getItem(), tier);
+        return true;
+    }
+
+    private static int pickaxeTier(ItemStack stack) {
+        if (stack.is(Items.WOODEN_PICKAXE)) {
+            return 1;
+        }
+        if (stack.is(Items.STONE_PICKAXE)) {
+            return 2;
+        }
+        if (stack.is(Items.IRON_PICKAXE)) {
+            return 3;
+        }
+        return 0;
     }
 
     /** Food items produced by farmers/hunters that move through the shared food economy. */
